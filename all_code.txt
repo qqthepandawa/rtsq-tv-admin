@@ -1,0 +1,3504 @@
+================================================================
+RTSQ TV - FULL SOURCE DUMP
+Generated: 2026-11-04 10:00:53
+Root: C:/RTSQ TV
+================================================================
+
+
+
+================================================================
+FILE: rtsq_tv/pubspec.yaml  (35 lines)
+================================================================
+
+name: rtsq_tv
+description: "RTSQ TV - layar informasi Rumah Tahfizh Smart Qur'an"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  intl: ^0.20.2
+  wakelock_plus: ^1.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/brand/
+
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Variable.ttf
+    - family: Amiri
+      fonts:
+        - asset: assets/fonts/Amiri-Regular.ttf
+        - asset: assets/fonts/Amiri-Bold.ttf
+          weight: 700
+
+
+================================================================
+FILE: rtsq_tv/analysis_options.yaml  (28 lines)
+================================================================
+
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+
+# The following line activates a set of recommended lints for Flutter apps,
+# packages, and plugins designed to encourage good coding practices.
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  # The lint rules applied to this project can be customized in the
+  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
+  # included above or to enable additional rules. A list of all available lints
+  # and their documentation is published at https://dart.dev/lints.
+  #
+  # Instead of disabling a lint rule for the entire project in the
+  # section below, it can also be suppressed for a single line of code
+  # or a specific dart file by using the `// ignore: name_of_lint` and
+  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
+  # producing the lint.
+  rules:
+    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
+    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options
+
+
+================================================================
+FILE: rtsq_tv/lib/app/tv_shell.dart  (202 lines)
+================================================================
+
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../core/theme.dart';
+import '../data/mock_data.dart';
+import '../features/header/header_bar.dart';
+import '../features/prayer/prayer_strip.dart';
+import '../features/slideshow/slideshow_panel.dart';
+import '../features/ticker/ticker_bar.dart';
+
+/// Kanvas tetap 1920x1080. Seluruh layar diskalakan seragam agar proporsi
+/// tetap sama di TV 1080p, 720p, maupun jendela desktop.
+class TvViewport extends StatelessWidget {
+  const TvViewport({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.bg,
+      child: MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+        child: FittedBox(
+          fit: BoxFit.contain,
+          child: const SizedBox(width: 1920, height: 1080, child: TvShell()),
+        ),
+      ),
+    );
+  }
+}
+
+class TvShell extends StatefulWidget {
+  const TvShell({
+    super.key,
+    this.fixedNow,
+    this.rotateSlides = true,
+    this.initialSlide = 0,
+    this.tickerProgress,
+  });
+
+  /// Dipakai golden test agar tampilan deterministik.
+  final DateTime? fixedNow;
+  final bool rotateSlides;
+  final int initialSlide;
+  final double? tickerProgress;
+
+  @override
+  State<TvShell> createState() => _TvShellState();
+}
+
+class _TvShellState extends State<TvShell> {
+  late DateTime _now = widget.fixedNow ?? DateTime.now();
+  late int _slide = widget.initialSlide;
+  Timer? _clockTimer;
+  Timer? _slideTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.fixedNow == null) {
+      _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _now = DateTime.now());
+      });
+    }
+    if (widget.rotateSlides) {
+      _slideTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+        if (mounted) {
+          setState(() => _slide = (_slide + 1) % mockSlides.length);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    _slideTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = activePrayerIndex(_now);
+    final next = nextPrayerIndex(_now);
+
+    return DefaultTextStyle(
+      style: const TextStyle(
+        fontFamily: AppText.family,
+        color: AppColors.text,
+        decoration: TextDecoration.none,
+        fontSize: 16,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const _Backdrop(),
+          Column(
+            children: [
+              RepaintBoundary(child: HeaderBar(now: _now)),
+              RepaintBoundary(
+                child: SlideshowPanel(
+                  slide: mockSlides[_slide],
+                  index: _slide,
+                  count: mockSlides.length,
+                ),
+              ),
+              RepaintBoundary(
+                child: PrayerStrip(
+                  now: _now,
+                  activeIndex: active,
+                  nextIndex: next,
+                ),
+              ),
+              RepaintBoundary(
+                child: TickerBar(
+                  text: mockTicker,
+                  startProgress: widget.tickerProgress,
+                ),
+              ),
+            ],
+          ),
+          // Garis aksen tipis di tepi atas layar.
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SizedBox(
+              height: 3,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0x00C9AE5C),
+                      AppColors.gold,
+                      Color(0x00C9AE5C),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Backdrop extends StatelessWidget {
+  const _Backdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.bgTop, AppColors.bg, Color(0xFF050C0A)],
+            ),
+          ),
+        ),
+        Positioned(
+          top: -260,
+          left: -180,
+          child: Container(
+            width: 900,
+            height: 900,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.gold.withValues(alpha: 0.055),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -320,
+          right: -200,
+          child: Container(
+            width: 1000,
+            height: 1000,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.teal.withValues(alpha: 0.045),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+
+================================================================
+FILE: rtsq_tv/lib/core/format.dart  (54 lines)
+================================================================
+
+import 'dart:ui';
+
+import 'package:intl/intl.dart';
+
+const _dayNames = <String>[
+  'Senin',
+  'Selasa',
+  'Rabu',
+  'Kamis',
+  'Jumat',
+  'Sabtu',
+  'Minggu',
+];
+
+const _monthNames = <String>[
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+];
+
+String formatIndonesianDate(DateTime date) {
+  final day = _dayNames[date.weekday - 1];
+  final month = _monthNames[date.month - 1];
+  return '$day, ${date.day} $month ${date.year}';
+}
+
+String formatClock(DateTime date) => DateFormat('HH:mm').format(date);
+
+/// Fase 0 memakai tanggal Hijriah contoh. Fase 1 akan memakai paket `hijri`
+/// dengan offset bulanan dari admin dan pergantian tanggal saat Maghrib.
+const mockHijriDate = '24 Jumadil Awal 1448 H';
+
+String formatCountdown(Duration duration) {
+  final total = duration.isNegative ? Duration.zero : duration;
+  final hours = total.inHours;
+  final minutes = total.inMinutes.remainder(60);
+  final seconds = total.inSeconds.remainder(60);
+  String two(int value) => value.toString().padLeft(2, '0');
+  return hours > 0
+      ? '$hours:${two(minutes)}:${two(seconds)}'
+      : '${two(minutes)}:${two(seconds)}';
+}
+
+/// Angka tabular agar jam tidak "bergoyang" saat digit berubah.
+const tabularFigures = <FontFeature>[FontFeature.tabularFigures()];
+
+
+================================================================
+FILE: rtsq_tv/lib/core/theme.dart  (140 lines)
+================================================================
+
+import 'package:flutter/material.dart';
+
+/// Palet RTSQ TV, diturunkan dari logo resmi:
+/// emas RTSQ #BBA84C dan teal YKCA #07A78F di atas latar hijau gelap.
+class AppColors {
+  static const bg = Color(0xFF07110E);
+  static const bgTop = Color(0xFF0B1714);
+  static const panel = Color(0xFF12211D);
+  static const panelAlt = Color(0xFF162A24);
+  static const gold = Color(0xFFC9AE5C);
+  static const goldSoft = Color(0x2EC9AE5C);
+  static const goldLine = Color(0x66C9AE5C);
+  static const teal = Color(0xFF12B3A0);
+  static const tealSoft = Color(0x2412B3A0);
+  static const text = Color(0xFFF7F3E8);
+  static const muted = Color(0xFF9FB0A8);
+  static const line = Color(0xFF24382F);
+  static const danger = Color(0xFFE0574A);
+}
+
+class AppText {
+  static const family = 'PlusJakartaSans';
+  static const arabic = 'Amiri';
+
+  static TextStyle get clock => const TextStyle(
+    fontFamily: family,
+    fontSize: 96,
+    height: 1,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -2,
+    color: AppColors.text,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  static TextStyle get zoneLabel => const TextStyle(
+    fontFamily: family,
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 2.4,
+    color: AppColors.muted,
+  );
+
+  static TextStyle get institution => const TextStyle(
+    fontFamily: family,
+    fontSize: 34,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: AppColors.text,
+  );
+
+  static TextStyle get body => const TextStyle(
+    fontFamily: family,
+    fontSize: 26,
+    height: 1.45,
+    fontWeight: FontWeight.w400,
+    color: AppColors.muted,
+  );
+
+  static TextStyle get date => const TextStyle(
+    fontFamily: family,
+    fontSize: 30,
+    fontWeight: FontWeight.w600,
+    color: AppColors.text,
+  );
+
+  static TextStyle get hijri => const TextStyle(
+    fontFamily: family,
+    fontSize: 28,
+    fontWeight: FontWeight.w600,
+    color: AppColors.gold,
+  );
+
+  static TextStyle get prayerLabel => const TextStyle(
+    fontFamily: family,
+    fontSize: 21,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 2.2,
+    color: AppColors.muted,
+  );
+
+  static TextStyle get prayerTime => const TextStyle(
+    fontFamily: family,
+    fontSize: 40,
+    height: 1.1,
+    fontWeight: FontWeight.w700,
+    color: AppColors.text,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  static TextStyle get prayerHint => const TextStyle(
+    fontFamily: family,
+    fontSize: 17,
+    fontWeight: FontWeight.w500,
+    color: AppColors.muted,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  static TextStyle get slideKicker => const TextStyle(
+    fontFamily: family,
+    fontSize: 20,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 3,
+    color: AppColors.gold,
+  );
+
+  static TextStyle get slideTitle => const TextStyle(
+    fontFamily: family,
+    fontSize: 56,
+    height: 1.12,
+    fontWeight: FontWeight.w700,
+    color: AppColors.text,
+  );
+
+  static TextStyle get slideBody => const TextStyle(
+    fontFamily: family,
+    fontSize: 31,
+    height: 1.5,
+    fontWeight: FontWeight.w400,
+    color: Color(0xFFD7DED8),
+  );
+
+  static TextStyle get ticker => const TextStyle(
+    fontFamily: family,
+    fontSize: 31,
+    fontWeight: FontWeight.w500,
+    color: AppColors.text,
+  );
+}
+
+ThemeData buildTheme() {
+  return ThemeData(
+    brightness: Brightness.dark,
+    useMaterial3: true,
+    scaffoldBackgroundColor: AppColors.bg,
+    fontFamily: AppText.family,
+    textSelectionTheme: const TextSelectionThemeData(
+      cursorColor: AppColors.gold,
+    ),
+  );
+}
+
+
+================================================================
+FILE: rtsq_tv/lib/data/mock_data.dart  (160 lines)
+================================================================
+
+import 'dart:ui';
+
+import '../core/theme.dart';
+
+enum SlideKind { announcement, achievement, schedule, photo }
+
+class PrayerEntry {
+  const PrayerEntry({
+    required this.label,
+    required this.time,
+    required this.isPrayer,
+  });
+
+  final String label;
+  final String time;
+  final bool isPrayer;
+
+  DateTime at(DateTime day) {
+    final parts = time.split(':');
+    return DateTime(
+      day.year,
+      day.month,
+      day.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
+  }
+}
+
+class ScheduleEvent {
+  const ScheduleEvent({
+    required this.title,
+    required this.when,
+    required this.place,
+  });
+
+  final String title;
+  final String when;
+  final String place;
+}
+
+class MockSlide {
+  const MockSlide({
+    required this.kind,
+    required this.kicker,
+    required this.title,
+    required this.body,
+    this.meta,
+    this.events = const [],
+    this.accent = AppColors.gold,
+  });
+
+  final SlideKind kind;
+  final String kicker;
+  final String title;
+  final String body;
+  final String? meta;
+  final List<ScheduleEvent> events;
+  final Color accent;
+}
+
+/// Data contoh Fase 0. Sumber jadwal sholat: myquran/Kemenag, Kota Batam
+/// (kode 0506), 4 November 2026.
+const mockPrayers = <PrayerEntry>[
+  PrayerEntry(label: 'IMSAK', time: '04:18', isPrayer: false),
+  PrayerEntry(label: 'SUBUH', time: '04:28', isPrayer: true),
+  PrayerEntry(label: 'SYURUQ', time: '05:42', isPrayer: false),
+  PrayerEntry(label: 'DZUHUR', time: '11:51', isPrayer: true),
+  PrayerEntry(label: 'ASHAR', time: '15:11', isPrayer: true),
+  PrayerEntry(label: 'MAGHRIB', time: '17:53', isPrayer: true),
+  PrayerEntry(label: 'ISYA', time: '19:03', isPrayer: true),
+];
+
+const mockSlides = <MockSlide>[
+  MockSlide(
+    kind: SlideKind.announcement,
+    kicker: 'PENGUMUMAN',
+    title: 'Pendaftaran Santri Baru\n2027 / 2028',
+    body:
+        'Pendaftaran dibuka mulai 1 November 2026. Formulir dan informasi '
+        'lengkap dapat diperoleh di kantor RTSQ.',
+    meta: 'Gelombang I • 1 November – 31 Desember 2026',
+  ),
+  MockSlide(
+    kind: SlideKind.achievement,
+    kicker: 'PRESTASI SANTRI',
+    title: 'Juara 1 Musabaqah\nHifzhil Qur\'an',
+    body:
+        'Aisyah Nur Fadhilah meraih juara pertama kategori 10 juz pada '
+        'MTQ Tingkat Kota Batam 2026.',
+    meta: 'Aisyah Nur Fadhilah • Marhalah Wustho',
+    accent: AppColors.teal,
+  ),
+  MockSlide(
+    kind: SlideKind.schedule,
+    kicker: 'JADWAL PEKAN INI',
+    title: 'Kegiatan Santri',
+    body: 'Agenda RTSQ untuk pekan ini.',
+    events: [
+      ScheduleEvent(
+        title: 'Mabit Qur\'ani',
+        when: 'Jumat, 6 Nov • 19.30',
+        place: 'Aula RTSQ',
+      ),
+      ScheduleEvent(
+        title: 'Setoran Ziyadah',
+        when: 'Sabtu, 7 Nov • 07.30',
+        place: 'Ruang Halaqah',
+      ),
+      ScheduleEvent(
+        title: 'Kajian Orang Tua',
+        when: 'Ahad, 8 Nov • 09.00',
+        place: 'Masjid RTSQ',
+      ),
+    ],
+  ),
+  MockSlide(
+    kind: SlideKind.photo,
+    kicker: 'KEGIATAN',
+    title: 'Mabit Qur\'ani',
+    body: 'Malam bina iman dan takwa bersama santri RTSQ.',
+    meta: 'Dokumentasi RTSQ • Oktober 2026',
+  ),
+];
+
+const mockTicker =
+    'Selamat datang di Rumah Tahfizh Smart Qur\'an  •  Pendaftaran santri baru '
+    'tahun ajaran 2027/2028 telah dibuka  •  Program Tahfizh 30 Juz, '
+    'Tahsin, dan Bahasa Arab  •  Informasi: kantor RTSQ, Batam  •  '
+    'Dengan Al-Qur\'an hidupmu pasti baik';
+
+/// Indeks sholat terakhir yang sudah masuk (hanya sholat wajib), atau null
+/// bila hari ini belum masuk Subuh.
+int? activePrayerIndex(DateTime now) {
+  int? active;
+  for (var i = 0; i < mockPrayers.length; i++) {
+    final entry = mockPrayers[i];
+    if (!entry.isPrayer) continue;
+    if (!entry.at(now).isAfter(now)) active = i;
+  }
+  return active;
+}
+
+/// Indeks sholat berikutnya. Bila sudah lewat Isya, kembali ke Subuh besok.
+int nextPrayerIndex(DateTime now) {
+  for (var i = 0; i < mockPrayers.length; i++) {
+    final entry = mockPrayers[i];
+    if (!entry.isPrayer) continue;
+    if (entry.at(now).isAfter(now)) return i;
+  }
+  return mockPrayers.indexWhere((entry) => entry.label == 'SUBUH');
+}
+
+DateTime nextPrayerTime(DateTime now) {
+  final index = nextPrayerIndex(now);
+  final entry = mockPrayers[index];
+  final at = entry.at(now);
+  if (at.isAfter(now)) return at;
+  return entry.at(now.add(const Duration(days: 1)));
+}
+
+
+================================================================
+FILE: rtsq_tv/lib/features/header/header_bar.dart  (129 lines)
+================================================================
+
+import 'package:flutter/material.dart';
+
+import '../../core/format.dart';
+import '../../core/theme.dart';
+
+class HeaderBar extends StatelessWidget {
+  const HeaderBar({super.key, required this.now});
+
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 140,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(56, 12, 56, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(width: 420, child: _ClockBlock(now: now)),
+            const Expanded(child: _IdentityBlock()),
+            SizedBox(width: 430, child: _DateBlock(now: now)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClockBlock extends StatelessWidget {
+  const _ClockBlock({required this.now});
+
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 84,
+          decoration: BoxDecoration(
+            color: AppColors.gold,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 20),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(formatClock(now), style: AppText.clock),
+            const SizedBox(height: 4),
+            Text(
+              'WAKTU INDONESIA BARAT',
+              style: AppText.zoneLabel.copyWith(
+                fontSize: 15,
+                letterSpacing: 2.8,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _IdentityBlock extends StatelessWidget {
+  const _IdentityBlock();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Image.asset(
+          'assets/brand/rtsq_white_trim.png',
+          height: 112,
+          filterQuality: FilterQuality.high,
+        ),
+        const SizedBox(width: 24),
+        Container(width: 1, height: 74, color: AppColors.line),
+        const SizedBox(width: 24),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'RUMAH TAHFIZH SMART QUR\'AN',
+              style: AppText.institution.copyWith(
+                fontSize: 28,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text('Batam  •  Kepulauan Riau', style: AppText.body),
+            const SizedBox(height: 2),
+            Text(
+              'Yayasan Keluarga Cinta Al-Qur\'an',
+              style: AppText.body.copyWith(
+                fontSize: 20,
+                color: AppColors.muted.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DateBlock extends StatelessWidget {
+  const _DateBlock({required this.now});
+
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(formatIndonesianDate(now), style: AppText.date),
+        const SizedBox(height: 7),
+        Text(mockHijriDate, style: AppText.hijri),
+      ],
+    );
+  }
+}
+
+
+================================================================
+FILE: rtsq_tv/lib/features/prayer/prayer_strip.dart  (167 lines)
+================================================================
+
+import 'package:flutter/material.dart';
+
+import '../../core/format.dart';
+import '../../core/theme.dart';
+import '../../data/mock_data.dart';
+
+class PrayerStrip extends StatelessWidget {
+  const PrayerStrip({
+    super.key,
+    required this.now,
+    required this.activeIndex,
+    required this.nextIndex,
+  });
+
+  final DateTime now;
+  final int? activeIndex;
+  final int nextIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final countdown = nextPrayerTime(now).difference(now);
+    final isFriday = now.weekday == DateTime.friday;
+
+    return SizedBox(
+      height: 184,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(56, 10, 56, 18),
+        child: Row(
+          children: [
+            for (var i = 0; i < mockPrayers.length; i++) ...[
+              if (i > 0) const SizedBox(width: 12),
+              Expanded(
+                child: _PrayerCard(
+                  entry: mockPrayers[i],
+                  isFriday: isFriday,
+                  isActive: activeIndex == i,
+                  isNext: nextIndex == i,
+                  countdown: countdown,
+                  nextLabel: mockPrayers[nextIndex].label,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PrayerCard extends StatelessWidget {
+  const _PrayerCard({
+    required this.entry,
+    required this.isFriday,
+    required this.isActive,
+    required this.isNext,
+    required this.countdown,
+    required this.nextLabel,
+  });
+
+  final PrayerEntry entry;
+  final bool isFriday;
+  final bool isActive;
+  final bool isNext;
+  final Duration countdown;
+  final String nextLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = isFriday && entry.label == 'DZUHUR' ? 'JUMAT' : entry.label;
+    final borderColor = isActive
+        ? AppColors.gold
+        : isNext
+        ? AppColors.teal.withValues(alpha: 0.75)
+        : AppColors.line;
+    final labelColor = isActive
+        ? AppColors.gold
+        : isNext
+        ? AppColors.teal
+        : AppColors.muted;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: isActive ? 1.6 : 1),
+        gradient: isActive
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0x33C9AE5C), Color(0x0AC9AE5C)],
+              )
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.panel, Color(0xFF0E1C18)],
+              ),
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: AppColors.gold.withValues(alpha: 0.16),
+                  blurRadius: 24,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: AppText.prayerLabel.copyWith(color: labelColor),
+              ),
+              const Spacer(),
+              if (isActive)
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.gold,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            entry.time,
+            style: AppText.prayerTime.copyWith(
+              color: isActive ? AppColors.gold : AppColors.text,
+            ),
+          ),
+          const Spacer(),
+          if (isActive)
+            Text(
+              'AKTIF  •  $nextLabel ${formatCountdown(countdown)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.prayerHint.copyWith(
+                color: AppColors.gold.withValues(alpha: 0.9),
+                fontSize: 15,
+              ),
+            )
+          else if (isNext)
+            Text(
+              'BERIKUTNYA',
+              style: AppText.prayerHint.copyWith(
+                color: AppColors.teal,
+                fontSize: 15,
+                letterSpacing: 1.2,
+              ),
+            )
+          else
+            Text(
+              'WIB',
+              style: AppText.prayerHint.copyWith(
+                fontSize: 14,
+                color: AppColors.muted.withValues(alpha: 0.55),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+
+================================================================
+FILE: rtsq_tv/lib/features/slideshow/slideshow_panel.dart  (532 lines)
+================================================================
+
+import 'package:flutter/material.dart';
+
+import '../../core/theme.dart';
+import '../../data/mock_data.dart';
+
+class SlideshowPanel extends StatelessWidget {
+  const SlideshowPanel({
+    super.key,
+    required this.slide,
+    required this.index,
+    required this.count,
+  });
+
+  final MockSlide slide;
+  final int index;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 670,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(56, 6, 56, 14),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.panel, Color(0xFF0C1915)],
+              ),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 420),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  layoutBuilder: (current, previous) => Stack(
+                    fit: StackFit.expand,
+                    children: [...previous, ?current],
+                  ),
+                  child: KeyedSubtree(
+                    key: ValueKey('${slide.kicker}-$index'),
+                    child: _SlideContent(slide: slide),
+                  ),
+                ),
+                Positioned(
+                  top: 20,
+                  right: 24,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.bg.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.line),
+                    ),
+                    child: Text(
+                      '${(index + 1).toString().padLeft(2, '0')} / '
+                      '${count.toString().padLeft(2, '0')}',
+                      style: const TextStyle(
+                        fontFamily: AppText.family,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SlideContent extends StatelessWidget {
+  const _SlideContent({required this.slide});
+
+  final MockSlide slide;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (slide.kind) {
+      case SlideKind.schedule:
+        return _ScheduleSlide(slide: slide);
+      case SlideKind.photo:
+        return _PhotoSlide(slide: slide);
+      case SlideKind.announcement:
+      case SlideKind.achievement:
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(width: 690, child: _MediaPanel(slide: slide)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(48, 44, 52, 40),
+                child: _TextBlock(slide: slide),
+              ),
+            ),
+          ],
+        );
+    }
+  }
+}
+
+class _TextBlock extends StatelessWidget {
+  const _TextBlock({required this.slide});
+
+  final MockSlide slide;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Kicker(label: slide.kicker, color: slide.accent),
+        const SizedBox(height: 24),
+        Flexible(
+          child: Text(
+            slide.title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.slideTitle,
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          slide.body,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: AppText.slideBody,
+        ),
+        const Spacer(),
+        if (slide.meta != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.goldSoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              slide.meta!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: AppText.family,
+                fontSize: 21,
+                fontWeight: FontWeight.w600,
+                color: AppColors.gold,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ScheduleSlide extends StatelessWidget {
+  const _ScheduleSlide({required this.slide});
+
+  final MockSlide slide;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(48, 40, 48, 36),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Kicker(label: slide.kicker, color: slide.accent),
+          const SizedBox(height: 18),
+          Text(slide.title, style: AppText.slideTitle),
+          const SizedBox(height: 6),
+          Text(slide.body, style: AppText.slideBody),
+          const SizedBox(height: 30),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < slide.events.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 18),
+                  Expanded(
+                    child: _EventCard(event: slide.events[i], index: i),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventCard extends StatelessWidget {
+  const _EventCard({required this.event, required this.index});
+
+  final ScheduleEvent event;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(26, 22, 26, 22),
+      decoration: BoxDecoration(
+        color: AppColors.panelAlt,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '0${index + 1}',
+                style: const TextStyle(
+                  fontFamily: AppText.family,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.4,
+                  color: AppColors.teal,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: Container(height: 1, color: AppColors.line)),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            event.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: AppText.family,
+              fontSize: 30,
+              height: 1.2,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            event.when,
+            style: const TextStyle(
+              fontFamily: AppText.family,
+              fontSize: 21,
+              fontWeight: FontWeight.w600,
+              color: AppColors.gold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            event.place,
+            style: const TextStyle(
+              fontFamily: AppText.family,
+              fontSize: 19,
+              color: AppColors.muted,
+            ),
+          ),
+          const Spacer(),
+          const Icon(
+            Icons.arrow_forward_rounded,
+            color: AppColors.muted,
+            size: 22,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoSlide extends StatelessWidget {
+  const _PhotoSlide({required this.slide});
+
+  final MockSlide slide;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _MediaPanel(slide: slide, fullBleed: true),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Color(0xE607110E)],
+              stops: [0.45, 1],
+            ),
+          ),
+        ),
+        Positioned(
+          left: 52,
+          right: 300,
+          bottom: 44,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Kicker(label: slide.kicker, color: slide.accent),
+              const SizedBox(height: 16),
+              Text(slide.title, style: AppText.slideTitle),
+              const SizedBox(height: 8),
+              Text(slide.body, style: AppText.slideBody),
+            ],
+          ),
+        ),
+        if (slide.meta != null)
+          Positioned(
+            right: 48,
+            bottom: 48,
+            child: Text(
+              slide.meta!,
+              style: const TextStyle(
+                fontFamily: AppText.family,
+                fontSize: 19,
+                fontWeight: FontWeight.w500,
+                color: AppColors.muted,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _Kicker extends StatelessWidget {
+  const _Kicker({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 38,
+          height: 3,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Text(label, style: AppText.slideKicker.copyWith(color: color)),
+      ],
+    );
+  }
+}
+
+class _MediaPanel extends StatelessWidget {
+  const _MediaPanel({required this.slide, this.fullBleed = false});
+
+  final MockSlide slide;
+  final bool fullBleed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isAchievement = slide.kind == SlideKind.achievement;
+    final isPhoto = slide.kind == SlideKind.photo;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isAchievement
+              ? const [Color(0xFF0E2E28), Color(0xFF0A1B18)]
+              : const [Color(0xFF232014), Color(0xFF11150F)],
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CustomPaint(
+            painter: _ArchPainter(color: slide.accent.withValues(alpha: 0.20)),
+          ),
+          Positioned(
+            top: 16,
+            right: 20,
+            child: Opacity(
+              opacity: 0.22,
+              child: Image.asset(
+                'assets/brand/rtsq_white_trim.png',
+                height: fullBleed ? 82 : 66,
+              ),
+            ),
+          ),
+          if (isAchievement)
+            Center(child: _AchievementBadge(accent: slide.accent))
+          else
+            Center(
+              child: Container(
+                width: fullBleed ? 300 : 230,
+                height: fullBleed ? 300 : 230,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: slide.accent.withValues(alpha: 0.05),
+                  border: Border.all(
+                    color: slide.accent.withValues(alpha: 0.28),
+                    width: 1.4,
+                  ),
+                ),
+                child: Icon(
+                  isPhoto
+                      ? Icons.photo_library_rounded
+                      : Icons.campaign_rounded,
+                  size: fullBleed ? 136 : 102,
+                  color: slide.accent.withValues(alpha: 0.62),
+                ),
+              ),
+            ),
+          Positioned(
+            left: 28,
+            bottom: 24,
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: slide.accent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  isPhoto ? 'DOKUMENTASI RTSQ' : 'RTSQ • BATAM',
+                  style: AppText.zoneLabel.copyWith(
+                    fontSize: 14,
+                    color: AppColors.text.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AchievementBadge extends StatelessWidget {
+  const _AchievementBadge({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 168,
+      height: 168,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF0A1B18).withValues(alpha: 0.72),
+        border: Border.all(color: accent.withValues(alpha: 0.75), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.22),
+            blurRadius: 40,
+            spreadRadius: 4,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'AN',
+            style: TextStyle(
+              fontFamily: AppText.family,
+              fontSize: 58,
+              fontWeight: FontWeight.w700,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'SANTRI',
+            style: AppText.zoneLabel.copyWith(fontSize: 12, letterSpacing: 2),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ArchPainter extends CustomPainter {
+  const _ArchPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+
+    for (final offset in [0.0, 46.0]) {
+      final w = size.width;
+      final h = size.height;
+      final left = w * 0.10 + offset;
+      final right = w * 0.92 + offset;
+      final path = Path()
+        ..moveTo(left, h)
+        ..lineTo(left, h * 0.52)
+        ..quadraticBezierTo(left, h * 0.20, (left + right) / 2, h * 0.06)
+        ..quadraticBezierTo(right, h * 0.20, right, h * 0.52)
+        ..lineTo(right, h);
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArchPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+
+================================================================
+FILE: rtsq_tv/lib/features/ticker/ticker_bar.dart  (143 lines)
+================================================================
+
+import 'package:flutter/material.dart';
+
+import '../../core/theme.dart';
+
+class TickerBar extends StatefulWidget {
+  const TickerBar({super.key, required this.text, this.startProgress});
+
+  final String text;
+
+  /// Posisi awal marquee (0..1). Dipakai golden test agar tampilan
+  /// deterministik; null berarti mulai dari awal.
+  final double? startProgress;
+
+  @override
+  State<TickerBar> createState() => _TickerBarState();
+}
+
+class _TickerBarState extends State<TickerBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 45),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startProgress != null) {
+      _controller.value = widget.startProgress!.clamp(0.0, 1.0);
+      return;
+    }
+    _controller.repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 86,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xFF0E1C18),
+          border: Border(
+            top: BorderSide(color: AppColors.goldLine),
+            bottom: BorderSide(color: AppColors.line),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 118,
+              height: double.infinity,
+              color: AppColors.gold,
+              alignment: Alignment.center,
+              child: const Text(
+                'INFO',
+                style: TextStyle(
+                  fontFamily: AppText.family,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 3,
+                  color: Color(0xFF0B1714),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ClipRect(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final textWidth = _measure(widget.text);
+                    final duration = Duration(
+                      milliseconds:
+                          ((constraints.maxWidth + textWidth) / 72 * 1000)
+                              .round(),
+                    );
+                    if (_controller.duration != duration) {
+                      _controller.duration = duration;
+                      if (widget.startProgress == null &&
+                          !_controller.isAnimating) {
+                        _controller.repeat();
+                      }
+                    }
+                    return AnimatedBuilder(
+                      animation: _controller,
+                      builder: (context, child) {
+                        final x =
+                            constraints.maxWidth -
+                            _controller.value *
+                                (constraints.maxWidth + textWidth);
+                        return Transform.translate(
+                          offset: Offset(x, 0),
+                          child: child,
+                        );
+                      },
+                      child: Text(
+                        widget.text,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: AppText.ticker,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              width: 1,
+              color: AppColors.line,
+            ),
+            Container(
+              margin: const EdgeInsets.only(right: 18, top: 6, bottom: 6),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F3E8),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Image.asset(
+                'assets/brand/ykca_trim.png',
+                height: 62,
+                filterQuality: FilterQuality.high,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  double _measure(String text) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: AppText.ticker),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    return painter.width;
+  }
+}
+
+
+================================================================
+FILE: rtsq_tv/lib/main.dart  (45 lines)
+================================================================
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+
+import 'app/tv_shell.dart';
+import 'core/theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
+
+  try {
+    await WakelockPlus.enable();
+  } catch (_) {
+    // Desktop/web bisa menolak; abaikan, ini bukan kegagalan fatal.
+  }
+
+  runApp(const RtsqTvApp());
+}
+
+class RtsqTvApp extends StatelessWidget {
+  const RtsqTvApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'RTSQ TV',
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(),
+      home: const TvViewport(),
+    );
+  }
+}
+
+
+================================================================
+FILE: rtsq_tv/test/golden_test.dart  (89 lines)
+================================================================
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:rtsq_tv/app/tv_shell.dart';
+import 'package:rtsq_tv/core/theme.dart';
+
+Future<void> _loadFonts() async {
+  final jakarta = FontLoader('PlusJakartaSans')
+    ..addFont(rootBundle.load('assets/fonts/PlusJakartaSans-Variable.ttf'));
+  await jakarta.load();
+  final amiri = FontLoader('Amiri')
+    ..addFont(rootBundle.load('assets/fonts/Amiri-Regular.ttf'))
+    ..addFont(rootBundle.load('assets/fonts/Amiri-Bold.ttf'));
+  await amiri.load();
+  final icons = FontLoader('MaterialIcons')
+    ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+  await icons.load();
+}
+
+Future<void> _precacheImages(WidgetTester tester) async {
+  final context = tester.element(find.byType(TvShell));
+  await tester.runAsync(() async {
+    await Future.wait([
+      precacheImage(
+        const AssetImage('assets/brand/rtsq_white_trim.png'),
+        context,
+      ),
+      precacheImage(const AssetImage('assets/brand/ykca_trim.png'), context),
+      precacheImage(const AssetImage('assets/brand/rtsq_trim.png'), context),
+    ]);
+  });
+  await tester.pump();
+}
+
+void main() {
+  setUpAll(_loadFonts);
+
+  testWidgets('tampilan utama 1920x1080', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 1080));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(),
+        home: TvShell(
+          fixedNow: DateTime(2026, 11, 4, 14, 32, 10),
+          rotateSlides: false,
+          initialSlide: 0,
+          tickerProgress: 0.42,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 700));
+    await _precacheImages(tester);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await expectLater(
+      find.byType(TvShell),
+      matchesGoldenFile('goldens/tv_shell_1920x1080.png'),
+    );
+  });
+
+  testWidgets('slide jadwal kegiatan', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 1080));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(),
+        home: TvShell(
+          fixedNow: DateTime(2026, 11, 4, 14, 32, 10),
+          rotateSlides: false,
+          initialSlide: 2,
+          tickerProgress: 0.42,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 700));
+    await _precacheImages(tester);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await expectLater(
+      find.byType(TvShell),
+      matchesGoldenFile('goldens/tv_shell_jadwal_1920x1080.png'),
+    );
+  });
+}
+
+
+================================================================
+FILE: rtsq_tv/test/mock_data_test.dart  (35 lines)
+================================================================
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:rtsq_tv/data/mock_data.dart';
+
+void main() {
+  test('sholat aktif mengikuti waktu terakhir yang sudah masuk', () {
+    expect(activePrayerIndex(DateTime(2026, 11, 4, 3, 0)), isNull);
+    expect(
+      activePrayerIndex(DateTime(2026, 11, 4, 4, 30)),
+      mockPrayers.indexWhere((e) => e.label == 'SUBUH'),
+    );
+    expect(
+      activePrayerIndex(DateTime(2026, 11, 4, 14, 32)),
+      mockPrayers.indexWhere((e) => e.label == 'DZUHUR'),
+    );
+    expect(
+      activePrayerIndex(DateTime(2026, 11, 4, 23, 0)),
+      mockPrayers.indexWhere((e) => e.label == 'ISYA'),
+    );
+  });
+
+  test('sholat berikutnya melewati tengah malam ke Subuh', () {
+    expect(
+      nextPrayerIndex(DateTime(2026, 11, 4, 14, 32)),
+      mockPrayers.indexWhere((e) => e.label == 'ASHAR'),
+    );
+    expect(
+      nextPrayerIndex(DateTime(2026, 11, 4, 22, 0)),
+      mockPrayers.indexWhere((e) => e.label == 'SUBUH'),
+    );
+    expect(
+      nextPrayerTime(DateTime(2026, 11, 4, 22, 0)),
+      DateTime(2026, 11, 5, 4, 28),
+    );
+  });
+}
+
+
+================================================================
+FILE: rtsq_tv/android/app/build.gradle.kts  (42 lines)
+================================================================
+
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "id.rtsq.tv"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        applicationId = "id.rtsq.tv"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+
+================================================================
+FILE: rtsq_tv/android/build.gradle.kts  (24 lines)
+================================================================
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
+rootProject.layout.buildDirectory.value(newBuildDir)
+
+subprojects {
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
+}
+
+
+================================================================
+FILE: rtsq_tv/android/settings.gradle.kts  (26 lines)
+================================================================
+
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+
+
+================================================================
+FILE: rtsq_tv/android/gradle.properties  (6 lines)
+================================================================
+
+org.gradle.jvmargs=-Xmx8G -XX:MaxMetaspaceSize=4G -XX:ReservedCodeCacheSize=512m -XX:+HeapDumpOnOutOfMemoryError
+android.useAndroidX=true
+# This newDsl flag was added by the Flutter template
+android.newDsl=false
+# This builtInKotlin flag was added by the Flutter template
+android.builtInKotlin=false
+
+
+================================================================
+FILE: rtsq_tv/android/app/src/main/AndroidManifest.xml  (61 lines)
+================================================================
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+    <!-- Android TV: tidak butuh layar sentuh, dan app tetap bisa dipasang
+         di perangkat non-TV (mis. emulator/tablet) untuk pengujian. -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false"/>
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false"/>
+
+    <application
+        android:label="RTSQ TV"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="false">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:stateNotNeeded="true"
+            android:screenOrientation="landscape"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+            <!-- Jalur kiosk: app dapat dipilih sebagai beranda Android TV.
+                 Diuji di Fase 0.5 pada TV Aqua. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.HOME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+
+
+================================================================
+FILE: rtsq_tv/android/app/src/main/kotlin/id/rtsq/tv/MainActivity.kt  (5 lines)
+================================================================
+
+﻿package id.rtsq.tv
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
+
+
+================================================================
+FILE: rtsq_tv/android/app/src/main/res/values/styles.xml  (11 lines)
+================================================================
+
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/rtsq_bg</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+</resources>
+
+
+================================================================
+FILE: rtsq_tv/android/app/src/main/res/values/colors.xml  (4 lines)
+================================================================
+
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rtsq_bg">#07110E</color>
+</resources>
+
+
+================================================================
+FILE: rtsq_tv/web/index.html  (46 lines)
+================================================================
+
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="RTSQ TV - layar informasi Rumah Tahfizh Smart Qur'an">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="rtsq_tv">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>rtsq_tv</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
+
+
+================================================================
+FILE: rtsq_tv/web/manifest.json  (35 lines)
+================================================================
+
+{
+    "name": "rtsq_tv",
+    "short_name": "rtsq_tv",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "RTSQ TV - layar informasi Rumah Tahfizh Smart Qur'an",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
+
+
+================================================================
+FILE: supabase/migrations/0001_extensions.sql  (7 lines)
+================================================================
+
+-- 0001_extensions.sql
+-- Ekstensi dasar RTSQ TV.
+-- Catatan: di Supabase, ekstensi dipasang di skema `extensions`.
+-- Tipe citext karena itu dipakai sebagai `extensions.citext`.
+
+create extension if not exists pgcrypto with schema extensions;
+create extension if not exists citext with schema extensions;
+
+
+================================================================
+FILE: supabase/migrations/0002_types.sql  (28 lines)
+================================================================
+
+-- 0002_types.sql
+-- Semua tipe enum. Dibungkus DO agar migrasi aman dijalankan ulang.
+
+do $$ begin
+  create type public.admin_role as enum ('super', 'editor');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.device_status as enum ('pending', 'paired', 'revoked');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.content_type as enum (
+    'announcement', 'achievement', 'photo', 'video', 'schedule'
+  );
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.content_status as enum ('draft', 'published', 'archived');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.command_status as enum ('pending', 'running', 'done', 'failed');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.log_level as enum ('info', 'warn', 'error');
+exception when duplicate_object then null; end $$;
+
+
+================================================================
+FILE: supabase/migrations/0003_tables.sql  (320 lines)
+================================================================
+
+-- 0003_tables.sql
+-- Tabel, indeks, dan trigger dasar RTSQ TV.
+
+-- ---------------------------------------------------------------------------
+-- profiles: admin panel, 1:1 dengan auth.users
+-- ---------------------------------------------------------------------------
+create table if not exists public.profiles (
+  id          uuid primary key references auth.users (id) on delete cascade,
+  email       extensions.citext not null unique,
+  name        text not null,
+  role        public.admin_role not null default 'editor',
+  active      boolean not null default true,
+  created_at  timestamptz not null default now(),
+  created_by  uuid references public.profiles (id) on delete set null
+);
+
+-- ---------------------------------------------------------------------------
+-- admin_invites: undangan email, dihapus setelah dipakai
+-- ---------------------------------------------------------------------------
+create table if not exists public.admin_invites (
+  email       extensions.citext primary key,
+  role        public.admin_role not null default 'editor',
+  invited_by  uuid references public.profiles (id) on delete set null,
+  expires_at  timestamptz not null default (now() + interval '7 days'),
+  created_at  timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- contents: pengumuman, prestasi, foto, video, jadwal
+-- ---------------------------------------------------------------------------
+create table if not exists public.contents (
+  id              uuid primary key default gen_random_uuid(),
+  type            public.content_type not null,
+  title           text not null,
+  body            text,
+  media           jsonb not null default '[]'::jsonb,
+  student_name    text,
+  marhalah        text,
+  achievement     text,
+  achieved_at     date,
+  schedule_items  jsonb not null default '[]'::jsonb,
+  start_at        timestamptz,
+  end_at          timestamptz,
+  sort_order      integer not null default 0,
+  duration_seconds integer,
+  priority        integer not null default 0,
+  pinned          boolean not null default false,
+  active          boolean not null default true,
+  status          public.content_status not null default 'draft',
+  created_by      uuid references public.profiles (id) on delete set null
+                    default auth.uid(),
+  updated_by      uuid references public.profiles (id) on delete set null,
+  approved_by     uuid references public.profiles (id) on delete set null,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  approved_at     timestamptz,
+  version         integer not null default 1,
+  constraint contents_window_valid
+    check (start_at is null or end_at is null or end_at > start_at)
+);
+
+-- ---------------------------------------------------------------------------
+-- ticker: teks berjalan, bisa dijadwalkan
+-- ---------------------------------------------------------------------------
+create table if not exists public.ticker (
+  id          uuid primary key default gen_random_uuid(),
+  text        text not null,
+  start_at    timestamptz,
+  end_at      timestamptz,
+  sort_order  integer not null default 0,
+  active      boolean not null default true,
+  created_by  uuid references public.profiles (id) on delete set null
+                default auth.uid(),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  constraint ticker_window_valid
+    check (start_at is null or end_at is null or end_at > start_at)
+);
+
+-- ---------------------------------------------------------------------------
+-- settings: satu baris, id = 1
+-- ---------------------------------------------------------------------------
+create table if not exists public.settings (
+  id                      smallint primary key default 1 check (id = 1),
+  org_name                text not null default 'Rumah Tahfizh Smart Qur''an',
+  address                 text,
+  city                    text not null default 'Batam',
+  latitude                numeric(9, 6) not null default 1.130000,
+  longitude               numeric(9, 6) not null default 104.050000,
+  timezone                text not null default 'Asia/Jakarta',
+  hijri_offset            jsonb not null default '{}'::jsonb,
+  ihtiyati                jsonb not null default
+    '{"subuh": 2, "dzuhur": 2, "ashar": 2, "maghrib": 2, "isya": 2}'::jsonb,
+  iqamah_minutes          jsonb not null default
+    '{"subuh": 10, "dzuhur": 10, "ashar": 10, "maghrib": 7, "isya": 10}'::jsonb,
+  khutbah_minutes         integer not null default 15,
+  prayer_duration_minutes integer not null default 12,
+  slide_duration_seconds  integer not null default 10,
+  ticker_speed            integer not null default 72,
+  theme                   jsonb not null default '{}'::jsonb,
+  prayer_mode_enabled     jsonb not null default
+    '{"subuh": true, "dzuhur": true, "ashar": true, "maghrib": true, "isya": true}'::jsonb,
+  emergency               jsonb,
+  version                 integer not null default 1,
+  updated_at              timestamptz not null default now(),
+  updated_by              uuid references public.profiles (id) on delete set null
+);
+
+-- ---------------------------------------------------------------------------
+-- devices: TV yang mendaftar lewat sesi anonim
+-- ---------------------------------------------------------------------------
+create table if not exists public.devices (
+  id                  uuid primary key default gen_random_uuid(),
+  auth_uid            uuid not null unique,
+  name                text not null default 'TV RTSQ',
+  status              public.device_status not null default 'pending',
+  pairing_code        text,
+  pairing_expires_at  timestamptz,
+  pairing_attempts    integer not null default 0,
+  model               text,
+  android_version     text,
+  app_version         text,
+  last_seen_at        timestamptz,
+  last_sync_at        timestamptz,
+  current_content_id  uuid references public.contents (id) on delete set null,
+  screen_state        text not null default 'content'
+                        check (screen_state in ('content', 'prayer', 'emergency', 'idle')),
+  storage_used_bytes  bigint,
+  storage_free_bytes  bigint,
+  network             text check (network in ('wifi', 'ethernet', 'none')),
+  paired_at           timestamptz,
+  paired_by           uuid references public.profiles (id) on delete set null,
+  created_at          timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- commands: perintah jarak jauh untuk TV
+-- ---------------------------------------------------------------------------
+create table if not exists public.commands (
+  id          uuid primary key default gen_random_uuid(),
+  device_id   uuid not null references public.devices (id) on delete cascade,
+  type        text not null,
+  payload     jsonb not null default '{}'::jsonb,
+  status      public.command_status not null default 'pending',
+  created_by  uuid references public.profiles (id) on delete set null
+                default auth.uid(),
+  created_at  timestamptz not null default now(),
+  claimed_at  timestamptz,
+  executed_at timestamptz,
+  result      jsonb
+);
+
+-- ---------------------------------------------------------------------------
+-- logs: log dari TV, retensi 30 hari
+-- ---------------------------------------------------------------------------
+create table if not exists public.logs (
+  id          bigserial primary key,
+  device_id   uuid not null references public.devices (id) on delete cascade,
+  level       public.log_level not null default 'info',
+  message     text not null,
+  context     jsonb not null default '{}'::jsonb,
+  created_at  timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- audit_log: jejak perubahan admin, ditulis lewat trigger/fungsi definer
+-- ---------------------------------------------------------------------------
+create table if not exists public.audit_log (
+  id          bigserial primary key,
+  actor       uuid,
+  action      text not null,
+  entity      text not null,
+  entity_id   text,
+  diff        jsonb,
+  created_at  timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- Indeks (Blueprint 7.14)
+-- ---------------------------------------------------------------------------
+create index if not exists contents_publish_idx
+  on public.contents (status, active, start_at, end_at, sort_order);
+create index if not exists contents_updated_idx
+  on public.contents (updated_at desc);
+
+create index if not exists ticker_active_idx
+  on public.ticker (active, start_at, sort_order);
+
+create index if not exists commands_pending_idx
+  on public.commands (device_id, status, created_at);
+
+create index if not exists logs_device_idx
+  on public.logs (device_id, created_at desc);
+
+create unique index if not exists devices_pairing_code_idx
+  on public.devices (pairing_code)
+  where status = 'pending';
+
+create index if not exists devices_last_seen_idx
+  on public.devices (last_seen_at desc);
+
+create index if not exists audit_log_created_idx
+  on public.audit_log (created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Trigger: updated_at + version untuk contents
+-- ---------------------------------------------------------------------------
+create or replace function public.touch_contents()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at := now();
+  new.version := old.version + 1;
+  return new;
+end;
+$$;
+
+drop trigger if exists contents_touch on public.contents;
+create trigger contents_touch
+  before update on public.contents
+  for each row execute function public.touch_contents();
+
+-- ---------------------------------------------------------------------------
+-- Trigger: updated_at + version untuk settings
+-- ---------------------------------------------------------------------------
+create or replace function public.touch_settings()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at := now();
+  new.version := old.version + 1;
+  return new;
+end;
+$$;
+
+drop trigger if exists settings_touch on public.settings;
+create trigger settings_touch
+  before update on public.settings
+  for each row execute function public.touch_settings();
+
+-- ---------------------------------------------------------------------------
+-- Trigger: updated_at untuk ticker
+-- ---------------------------------------------------------------------------
+create or replace function public.touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists ticker_touch on public.ticker;
+create trigger ticker_touch
+  before update on public.ticker
+  for each row execute function public.touch_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Trigger: audit otomatis untuk tabel yang dikelola admin
+-- ---------------------------------------------------------------------------
+create or replace function public.audit_row()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_entity_id text;
+  v_row jsonb;
+begin
+  if tg_op = 'DELETE' then
+    v_row := to_jsonb(old);
+    v_entity_id := coalesce(v_row ->> 'id', v_row ->> 'email');
+    insert into public.audit_log (actor, action, entity, entity_id, diff)
+    values (v_actor, 'delete', tg_table_name, v_entity_id, v_row);
+    return old;
+  end if;
+
+  v_row := to_jsonb(new);
+  v_entity_id := coalesce(v_row ->> 'id', v_row ->> 'email');
+  insert into public.audit_log (actor, action, entity, entity_id, diff)
+  values (
+    v_actor,
+    lower(tg_op),
+    tg_table_name,
+    v_entity_id,
+    case when tg_op = 'UPDATE' then to_jsonb(new) - to_jsonb(old) else to_jsonb(new) end
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists contents_audit on public.contents;
+create trigger contents_audit
+  after insert or update or delete on public.contents
+  for each row execute function public.audit_row();
+
+drop trigger if exists ticker_audit on public.ticker;
+create trigger ticker_audit
+  after insert or update or delete on public.ticker
+  for each row execute function public.audit_row();
+
+drop trigger if exists settings_audit on public.settings;
+create trigger settings_audit
+  after update on public.settings
+  for each row execute function public.audit_row();
+
+drop trigger if exists profiles_audit on public.profiles;
+create trigger profiles_audit
+  after insert or update or delete on public.profiles
+  for each row execute function public.audit_row();
+
+drop trigger if exists invites_audit on public.admin_invites;
+create trigger invites_audit
+  after insert or update or delete on public.admin_invites
+  for each row execute function public.audit_row();
+
+
+================================================================
+FILE: supabase/migrations/0004_functions.sql  (544 lines)
+================================================================
+
+-- 0004_functions.sql
+-- Helper RLS + RPC. Semua `security definer` memakai search_path tetap dan
+-- memeriksa auth.uid() di dalam badan fungsi.
+
+-- ---------------------------------------------------------------------------
+-- Helper
+-- ---------------------------------------------------------------------------
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.active
+  );
+$$;
+
+create or replace function public.is_super()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.active
+      and p.role = 'super'
+  );
+$$;
+
+create or replace function public.is_paired_device()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.devices d
+    where d.auth_uid = auth.uid()
+      and d.status = 'paired'
+  );
+$$;
+
+create or replace function public.my_device_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select d.id from public.devices d where d.auth_uid = auth.uid();
+$$;
+
+-- ---------------------------------------------------------------------------
+-- register_device: dipanggil TV (sesi anonim) untuk membuat kode pairing.
+-- ---------------------------------------------------------------------------
+create or replace function public.register_device(
+  p_name text default null,
+  p_model text default null,
+  p_android_version text default null,
+  p_app_version text default null
+)
+returns table (
+  device_id uuid,
+  status public.device_status,
+  pairing_code text,
+  expires_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_id uuid;
+  v_status public.device_status;
+  v_code text;
+  v_exp timestamptz := now() + interval '10 minutes';
+  v_attempt integer := 0;
+begin
+  if v_uid is null then
+    raise exception 'Sesi tidak valid. Masuk ulang di TV.'
+      using errcode = '28000';
+  end if;
+
+  select d.id, d.status
+    into v_id, v_status
+    from public.devices d
+   where d.auth_uid = v_uid;
+
+  if v_id is not null and v_status = 'paired' then
+    update public.devices d
+       set last_seen_at = now(),
+           model = coalesce(p_model, d.model),
+           android_version = coalesce(p_android_version, d.android_version),
+           app_version = coalesce(p_app_version, d.app_version)
+     where d.id = v_id;
+
+    return query
+      select d.id, d.status, d.pairing_code, d.pairing_expires_at
+        from public.devices d
+       where d.id = v_id;
+    return;
+  end if;
+
+  if v_id is not null and v_status = 'revoked' then
+    raise exception 'Perangkat ini sudah dicabut aksesnya oleh admin.'
+      using errcode = '42501';
+  end if;
+
+  -- Buat kode 6 digit yang belum dipakai perangkat pending lain.
+  loop
+    v_code := lpad((floor(random() * 1000000))::integer::text, 6, '0');
+    exit when not exists (
+      select 1
+        from public.devices d
+       where d.pairing_code = v_code
+         and d.status = 'pending'
+    );
+    v_attempt := v_attempt + 1;
+    if v_attempt > 50 then
+      raise exception 'Gagal membuat kode pairing. Coba lagi.';
+    end if;
+  end loop;
+
+  if v_id is null then
+    insert into public.devices (
+      auth_uid, name, status, pairing_code, pairing_expires_at,
+      model, android_version, app_version, last_seen_at
+    )
+    values (
+      v_uid,
+      coalesce(nullif(p_name, ''), 'TV RTSQ'),
+      'pending',
+      v_code,
+      v_exp,
+      p_model,
+      p_android_version,
+      p_app_version,
+      now()
+    )
+    returning id into v_id;
+  else
+    update public.devices d
+       set name = coalesce(nullif(p_name, ''), d.name),
+           status = 'pending',
+           pairing_code = v_code,
+           pairing_expires_at = v_exp,
+           pairing_attempts = 0,
+           model = coalesce(p_model, d.model),
+           android_version = coalesce(p_android_version, d.android_version),
+           app_version = coalesce(p_app_version, d.app_version),
+           last_seen_at = now()
+     where d.id = v_id;
+  end if;
+
+  return query
+    select d.id, d.status, d.pairing_code, d.pairing_expires_at
+      from public.devices d
+     where d.id = v_id;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- pair_device: admin memasukkan kode yang tampil di TV.
+-- ---------------------------------------------------------------------------
+create or replace function public.pair_device(
+  p_code text,
+  p_name text default null
+)
+returns table (
+  device_id uuid,
+  device_name text,
+  paired_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_device public.devices%rowtype;
+begin
+  if not public.is_admin() then
+    raise exception 'Hanya admin yang dapat memasangkan perangkat.'
+      using errcode = '42501';
+  end if;
+
+  select *
+    into v_device
+    from public.devices d
+   where d.pairing_code = trim(p_code)
+     and d.status = 'pending'
+   for update;
+
+  if not found then
+    raise exception 'Kode pairing tidak dikenal atau sudah dipakai.';
+  end if;
+
+  if v_device.pairing_expires_at is null
+     or v_device.pairing_expires_at < now() then
+    raise exception 'Kode pairing sudah kedaluwarsa. Minta TV menampilkan kode baru.';
+  end if;
+
+  if v_device.pairing_attempts >= 10 then
+    raise exception 'Terlalu banyak percobaan. Minta TV menampilkan kode baru.';
+  end if;
+
+  update public.devices d
+     set status = 'paired',
+         name = coalesce(nullif(p_name, ''), d.name),
+         pairing_code = null,
+         pairing_expires_at = null,
+         paired_at = now(),
+         paired_by = auth.uid(),
+         last_seen_at = now()
+   where d.id = v_device.id;
+
+  insert into public.audit_log (actor, action, entity, entity_id, diff)
+  values (
+    auth.uid(),
+    'pair',
+    'devices',
+    v_device.id::text,
+    jsonb_build_object('name', coalesce(nullif(p_name, ''), v_device.name))
+  );
+
+  return query
+    select d.id, d.name, d.paired_at
+      from public.devices d
+     where d.id = v_device.id;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- device_heartbeat: TV melapor status dan mengambil versi konten terbaru.
+-- ---------------------------------------------------------------------------
+create or replace function public.device_heartbeat(
+  p_app_version text default null,
+  p_storage_used bigint default null,
+  p_storage_free bigint default null,
+  p_network text default null,
+  p_screen_state text default null,
+  p_current_content_id uuid default null
+)
+returns table (
+  settings_version integer,
+  contents_updated_at timestamptz,
+  ticker_updated_at timestamptz,
+  server_time timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_device public.devices%rowtype;
+begin
+  select *
+    into v_device
+    from public.devices d
+   where d.auth_uid = auth.uid();
+
+  if not found then
+    raise exception 'Perangkat belum terdaftar.' using errcode = '42501';
+  end if;
+
+  if v_device.status = 'revoked' then
+    raise exception 'Perangkat sudah dicabut aksesnya.' using errcode = '42501';
+  end if;
+
+  update public.devices d
+     set last_seen_at = now(),
+         last_sync_at = case when v_device.status = 'paired' then now() else d.last_sync_at end,
+         app_version = coalesce(p_app_version, d.app_version),
+         storage_used_bytes = coalesce(p_storage_used, d.storage_used_bytes),
+         storage_free_bytes = coalesce(p_storage_free, d.storage_free_bytes),
+         network = coalesce(p_network, d.network),
+         screen_state = coalesce(p_screen_state, d.screen_state),
+         current_content_id = coalesce(p_current_content_id, d.current_content_id)
+   where d.id = v_device.id;
+
+  return query
+    select
+      coalesce((select s.version from public.settings s where s.id = 1), 0),
+      (select max(c.updated_at) from public.contents c
+        where c.status = 'published' and c.active),
+      (select max(t.updated_at) from public.ticker t where t.active),
+      now();
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- claim_commands: ambil perintah pending milik perangkat ini secara atomik.
+-- ---------------------------------------------------------------------------
+create or replace function public.claim_commands(p_limit integer default 10)
+returns setof public.commands
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_device uuid := public.my_device_id();
+begin
+  if v_device is null then
+    raise exception 'Perangkat belum terdaftar.' using errcode = '42501';
+  end if;
+
+  return query
+    with claimed as (
+      select c.id
+        from public.commands c
+       where c.device_id = v_device
+         and c.status = 'pending'
+       order by c.created_at
+       limit greatest(1, least(p_limit, 50))
+       for update skip locked
+    )
+    update public.commands c
+       set status = 'running',
+           claimed_at = now()
+      from claimed
+     where c.id = claimed.id
+    returning c.*;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- complete_command: TV menutup perintah.
+-- ---------------------------------------------------------------------------
+create or replace function public.complete_command(
+  p_id uuid,
+  p_status public.command_status,
+  p_result jsonb default null
+)
+returns public.commands
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_device uuid := public.my_device_id();
+  v_row public.commands%rowtype;
+begin
+  if v_device is null then
+    raise exception 'Perangkat belum terdaftar.' using errcode = '42501';
+  end if;
+
+  if p_status not in ('done', 'failed') then
+    raise exception 'Status akhir harus done atau failed.';
+  end if;
+
+  update public.commands c
+     set status = p_status,
+         executed_at = now(),
+         result = p_result
+   where c.id = p_id
+     and c.device_id = v_device
+     and c.status in ('pending', 'running')
+  returning * into v_row;
+
+  if not found then
+    raise exception 'Perintah tidak ditemukan atau sudah selesai.';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- accept_invite: admin baru mendaftar lalu profilnya dibuat dari undangan.
+-- ---------------------------------------------------------------------------
+create or replace function public.accept_invite(p_name text default null)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_invite public.admin_invites%rowtype;
+  v_profile public.profiles%rowtype;
+begin
+  if v_uid is null then
+    raise exception 'Sesi tidak valid.' using errcode = '28000';
+  end if;
+
+  select lower(u.email::text)
+    into v_email
+    from auth.users u
+   where u.id = v_uid;
+
+  if v_email is null then
+    raise exception 'Akun ini tidak memiliki email.';
+  end if;
+
+  select *
+    into v_invite
+    from public.admin_invites i
+   where i.email = v_email::extensions.citext
+   for update;
+
+  if not found then
+    raise exception 'Email % belum diundang admin.' , v_email
+      using errcode = '42501';
+  end if;
+
+  if v_invite.expires_at < now() then
+    delete from public.admin_invites i where i.email = v_invite.email;
+    raise exception 'Undangan sudah kedaluwarsa. Minta admin mengirim ulang.';
+  end if;
+
+  insert into public.profiles (id, email, name, role, created_by)
+  values (
+    v_uid,
+    v_email::extensions.citext,
+    coalesce(nullif(p_name, ''), split_part(v_email, '@', 1)),
+    v_invite.role,
+    v_invite.invited_by
+  )
+  on conflict (id) do nothing;
+
+  select * into v_profile from public.profiles p where p.id = v_uid;
+
+  delete from public.admin_invites i where i.email = v_invite.email;
+
+  return v_profile;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- set_admin_active: super admin menonaktifkan/mengaktifkan admin lain.
+-- ---------------------------------------------------------------------------
+create or replace function public.set_admin_active(
+  p_uid uuid,
+  p_active boolean
+)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_target public.profiles%rowtype;
+  v_other_supers integer;
+begin
+  if not public.is_super() then
+    raise exception 'Hanya super admin yang dapat mengubah status admin.'
+      using errcode = '42501';
+  end if;
+
+  if p_uid = auth.uid() and not p_active then
+    raise exception 'Super admin tidak dapat menonaktifkan dirinya sendiri.';
+  end if;
+
+  select * into v_target from public.profiles p where p.id = p_uid;
+  if not found then
+    raise exception 'Admin tidak ditemukan.';
+  end if;
+
+  if not p_active and v_target.role = 'super' and v_target.active then
+    select count(*)
+      into v_other_supers
+      from public.profiles p
+     where p.role = 'super'
+       and p.active
+       and p.id <> p_uid;
+
+    if v_other_supers = 0 then
+      raise exception 'Harus ada minimal satu super admin yang aktif.';
+    end if;
+  end if;
+
+  update public.profiles p
+     set active = p_active
+   where p.id = p_uid
+  returning * into v_target;
+
+  return v_target;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- purge_old_logs: dijalankan pg_cron harian (retensi 30 hari).
+-- ---------------------------------------------------------------------------
+create or replace function public.purge_old_logs()
+returns table (logs_deleted bigint, invites_deleted bigint)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_logs bigint;
+  v_invites bigint;
+begin
+  delete from public.logs l
+   where l.created_at < now() - interval '30 days';
+  get diagnostics v_logs = row_count;
+
+  delete from public.admin_invites i
+   where i.expires_at < now() - interval '7 days';
+  get diagnostics v_invites = row_count;
+
+  return query select v_logs, v_invites;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Hak eksekusi: hanya pengguna login (termasuk sesi anonim TV).
+-- ---------------------------------------------------------------------------
+revoke all on function public.is_admin() from public, anon;
+revoke all on function public.is_super() from public, anon;
+revoke all on function public.is_paired_device() from public, anon;
+revoke all on function public.my_device_id() from public, anon;
+revoke all on function public.register_device(text, text, text, text) from public, anon;
+revoke all on function public.pair_device(text, text) from public, anon;
+revoke all on function public.device_heartbeat(text, bigint, bigint, text, text, uuid) from public, anon;
+revoke all on function public.claim_commands(integer) from public, anon;
+revoke all on function public.complete_command(uuid, public.command_status, jsonb) from public, anon;
+revoke all on function public.accept_invite(text) from public, anon;
+revoke all on function public.set_admin_active(uuid, boolean) from public, anon;
+revoke all on function public.purge_old_logs() from public, anon, authenticated;
+
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_super() to authenticated;
+grant execute on function public.is_paired_device() to authenticated;
+grant execute on function public.my_device_id() to authenticated;
+grant execute on function public.register_device(text, text, text, text) to authenticated;
+grant execute on function public.pair_device(text, text) to authenticated;
+grant execute on function public.device_heartbeat(text, bigint, bigint, text, text, uuid) to authenticated;
+grant execute on function public.claim_commands(integer) to authenticated;
+grant execute on function public.complete_command(uuid, public.command_status, jsonb) to authenticated;
+grant execute on function public.accept_invite(text) to authenticated;
+grant execute on function public.set_admin_active(uuid, boolean) to authenticated;
+
+
+================================================================
+FILE: supabase/migrations/0005_rls.sql  (192 lines)
+================================================================
+
+-- 0005_rls.sql
+-- Aktifkan RLS dan pasang policy per tabel (Blueprint 7.11).
+
+alter table public.profiles      enable row level security;
+alter table public.admin_invites enable row level security;
+alter table public.contents      enable row level security;
+alter table public.ticker        enable row level security;
+alter table public.settings      enable row level security;
+alter table public.devices       enable row level security;
+alter table public.commands      enable row level security;
+alter table public.logs          enable row level security;
+alter table public.audit_log     enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- profiles
+-- ---------------------------------------------------------------------------
+drop policy if exists profiles_select on public.profiles;
+create policy profiles_select on public.profiles
+  for select to authenticated
+  using (public.is_admin());
+
+drop policy if exists profiles_update on public.profiles;
+create policy profiles_update on public.profiles
+  for update to authenticated
+  using (public.is_super())
+  with check (public.is_super());
+
+drop policy if exists profiles_delete on public.profiles;
+create policy profiles_delete on public.profiles
+  for delete to authenticated
+  using (public.is_super());
+
+-- INSERT sengaja tidak ada: hanya lewat RPC accept_invite() / bootstrap SQL.
+
+-- ---------------------------------------------------------------------------
+-- admin_invites
+-- ---------------------------------------------------------------------------
+drop policy if exists invites_select on public.admin_invites;
+create policy invites_select on public.admin_invites
+  for select to authenticated
+  using (public.is_super());
+
+drop policy if exists invites_insert on public.admin_invites;
+create policy invites_insert on public.admin_invites
+  for insert to authenticated
+  with check (public.is_super());
+
+drop policy if exists invites_delete on public.admin_invites;
+create policy invites_delete on public.admin_invites
+  for delete to authenticated
+  using (public.is_super());
+
+-- ---------------------------------------------------------------------------
+-- settings
+-- ---------------------------------------------------------------------------
+drop policy if exists settings_select on public.settings;
+create policy settings_select on public.settings
+  for select to authenticated
+  using (public.is_admin() or public.is_paired_device());
+
+drop policy if exists settings_update on public.settings;
+create policy settings_update on public.settings
+  for update to authenticated
+  using (public.is_super())
+  with check (public.is_super());
+
+-- ---------------------------------------------------------------------------
+-- contents
+-- ---------------------------------------------------------------------------
+drop policy if exists contents_select on public.contents;
+create policy contents_select on public.contents
+  for select to authenticated
+  using (
+    public.is_admin()
+    or (public.is_paired_device() and status = 'published' and active)
+  );
+
+drop policy if exists contents_insert on public.contents;
+create policy contents_insert on public.contents
+  for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists contents_update on public.contents;
+create policy contents_update on public.contents
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists contents_delete on public.contents;
+create policy contents_delete on public.contents
+  for delete to authenticated
+  using (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- ticker
+-- ---------------------------------------------------------------------------
+drop policy if exists ticker_select on public.ticker;
+create policy ticker_select on public.ticker
+  for select to authenticated
+  using (
+    public.is_admin()
+    or (public.is_paired_device() and active)
+  );
+
+drop policy if exists ticker_insert on public.ticker;
+create policy ticker_insert on public.ticker
+  for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists ticker_update on public.ticker;
+create policy ticker_update on public.ticker
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists ticker_delete on public.ticker;
+create policy ticker_delete on public.ticker
+  for delete to authenticated
+  using (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- devices
+-- ---------------------------------------------------------------------------
+drop policy if exists devices_select on public.devices;
+create policy devices_select on public.devices
+  for select to authenticated
+  using (public.is_admin() or auth_uid = auth.uid());
+
+drop policy if exists devices_insert on public.devices;
+create policy devices_insert on public.devices
+  for insert to authenticated
+  with check (
+    auth_uid = auth.uid()
+    and status = 'pending'
+    and pairing_code is not null
+  );
+
+drop policy if exists devices_update on public.devices;
+create policy devices_update on public.devices
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists devices_delete on public.devices;
+create policy devices_delete on public.devices
+  for delete to authenticated
+  using (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- commands
+-- ---------------------------------------------------------------------------
+drop policy if exists commands_select on public.commands;
+create policy commands_select on public.commands
+  for select to authenticated
+  using (public.is_admin() or device_id = public.my_device_id());
+
+drop policy if exists commands_insert on public.commands;
+create policy commands_insert on public.commands
+  for insert to authenticated
+  with check (public.is_admin());
+
+-- UPDATE hanya lewat RPC claim_commands()/complete_command().
+drop policy if exists commands_delete on public.commands;
+create policy commands_delete on public.commands
+  for delete to authenticated
+  using (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- logs
+-- ---------------------------------------------------------------------------
+drop policy if exists logs_select on public.logs;
+create policy logs_select on public.logs
+  for select to authenticated
+  using (public.is_admin() or device_id = public.my_device_id());
+
+drop policy if exists logs_insert on public.logs;
+create policy logs_insert on public.logs
+  for insert to authenticated
+  with check (device_id = public.my_device_id());
+
+drop policy if exists logs_delete on public.logs;
+create policy logs_delete on public.logs
+  for delete to authenticated
+  using (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- audit_log (hanya baca untuk admin; tulis lewat trigger definer)
+-- ---------------------------------------------------------------------------
+drop policy if exists audit_select on public.audit_log;
+create policy audit_select on public.audit_log
+  for select to authenticated
+  using (public.is_admin());
+
+
+================================================================
+FILE: supabase/migrations/0006_storage.sql  (42 lines)
+================================================================
+
+-- 0006_storage.sql
+-- Bucket privat `tv-media` + policy Storage (Blueprint 7.12 / 18.6).
+--
+-- Batas bucket 60 MB (video). Gambar dibatasi 4 MB di panel admin.
+-- Hanya tipe yang diizinkan.
+
+insert into storage.buckets (id, name, "public", file_size_limit, allowed_mime_types)
+values (
+  'tv-media',
+  'tv-media',
+  false,
+  62914560,
+  array['image/jpeg', 'image/png', 'image/webp', 'video/mp4']
+)
+on conflict (id) do update
+  set "public" = false,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists tv_media_read on storage.objects;
+create policy tv_media_read on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'tv-media'
+    and (public.is_admin() or public.is_paired_device())
+  );
+
+drop policy if exists tv_media_insert on storage.objects;
+create policy tv_media_insert on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'tv-media' and public.is_admin());
+
+drop policy if exists tv_media_update on storage.objects;
+create policy tv_media_update on storage.objects
+  for update to authenticated
+  using (bucket_id = 'tv-media' and public.is_admin())
+  with check (bucket_id = 'tv-media' and public.is_admin());
+
+drop policy if exists tv_media_delete on storage.objects;
+create policy tv_media_delete on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'tv-media' and public.is_admin());
+
+
+================================================================
+FILE: supabase/migrations/0007_realtime.sql  (35 lines)
+================================================================
+
+-- 0007_realtime.sql
+-- Publikasi realtime untuk contents, ticker, settings, commands (Blueprint 7.13).
+
+do $$
+declare
+  v_table text;
+begin
+  if not exists (
+    select 1 from pg_publication p where p.pubname = 'supabase_realtime'
+  ) then
+    create publication supabase_realtime;
+  end if;
+
+  foreach v_table in array array['contents', 'ticker', 'settings', 'commands']
+  loop
+    if not exists (
+      select 1
+        from pg_publication_tables t
+       where t.pubname = 'supabase_realtime'
+         and t.schemaname = 'public'
+         and t.tablename = v_table
+    ) then
+      execute format(
+        'alter publication supabase_realtime add table public.%I',
+        v_table
+      );
+    end if;
+  end loop;
+end;
+$$;
+
+-- Agar DELETE mengirim baris lama lengkap (dipakai panel admin).
+alter table public.contents replica identity full;
+alter table public.ticker replica identity full;
+alter table public.settings replica identity full;
+
+
+================================================================
+FILE: supabase/migrations/0008_seed.sql  (46 lines)
+================================================================
+
+-- 0008_seed.sql
+-- Baris settings awal untuk Batam (Blueprint 7.4 / 18.5).
+
+insert into public.settings (
+  id, org_name, address, city, latitude, longitude, timezone
+)
+values (
+  1,
+  'Rumah Tahfizh Smart Qur''an',
+  'Batam, Kepulauan Riau',
+  'Batam',
+  1.045600,
+  104.030500,
+  'Asia/Jakarta'
+)
+on conflict (id) do nothing;
+
+-- Teks berjalan sambutan. Bisa diedit/dihapus dari panel admin.
+insert into public.ticker (id, text, sort_order, active)
+select
+  '00000000-0000-4000-8000-000000000001'::uuid,
+  'Selamat datang di Rumah Tahfizh Smart Qur''an  •  Dengan Al-Qur''an hidupmu pasti baik',
+  0,
+  true
+where not exists (select 1 from public.ticker);
+
+-- ---------------------------------------------------------------------------
+-- Setelah migrasi:
+--
+-- 1) Aktifkan Anonymous Sign-ins di Authentication > Providers.
+-- 2) Daftarkan email Bapak di web admin, lalu jalankan sekali:
+--
+--    insert into public.profiles (id, email, name, role)
+--    select id, email, 'Admin RTSQ', 'super'
+--      from auth.users
+--     where email = 'email-bapak@contoh.id'
+--    on conflict (id) do nothing;
+--
+-- 3) Opsional, retensi log otomatis (butuh ekstensi pg_cron):
+--
+--    select cron.schedule(
+--      'rtsq-purge-old-logs',
+--      '15 3 * * *',
+--      $$select public.purge_old_logs()$$
+--    );
+-- ---------------------------------------------------------------------------
+
+
+================================================================
+FILE: supabase/README.md  (68 lines)
+================================================================
+
+# Supabase — RTSQ TV
+
+Proyek Supabase terpisah dari RTSQ Mobile. Tidak ada Firestore, tidak ada
+`service_role` di aplikasi maupun repo.
+
+## Isi migrasi
+
+Jalankan **berurutan** di SQL Editor (atau `supabase db push`):
+
+| Berkas | Isi |
+|---|---|
+| `0001_extensions.sql` | `pgcrypto`, `citext` |
+| `0002_types.sql` | enum `admin_role`, `device_status`, `content_type`, `content_status`, `command_status`, `log_level` |
+| `0003_tables.sql` | tabel, indeks, trigger `updated_at`/`version`, audit |
+| `0004_functions.sql` | helper RLS + RPC pairing, heartbeat, commands, invite, admin |
+| `0005_rls.sql` | RLS + policy tiap tabel |
+| `0006_storage.sql` | bucket privat `tv-media` + policy |
+| `0007_realtime.sql` | publikasi `contents`, `ticker`, `settings`, `commands` |
+| `0008_seed.sql` | baris `settings` Batam + ticker sambutan |
+
+## Setelah migrasi
+
+1. **Authentication → Providers → Anonymous Sign-ins: aktifkan.**
+   Dipakai TV untuk mendaftar sebagai perangkat.
+2. Daftarkan email admin pertama lewat panel web, lalu jalankan sekali:
+
+   ```sql
+   insert into public.profiles (id, email, name, role)
+   select id, email, 'Admin RTSQ', 'super'
+     from auth.users
+    where email = 'email-bapak@contoh.id'
+   on conflict (id) do nothing;
+   ```
+
+3. Opsional: jadwalkan pembersihan log (butuh `pg_cron`):
+
+   ```sql
+   select cron.schedule(
+     'rtsq-purge-old-logs', '15 3 * * *',
+     $$select public.purge_old_logs()$$
+   );
+   ```
+
+## Yang dibutuhkan aplikasi
+
+Hanya dua nilai, keduanya aman dipublikasikan:
+
+- `SUPABASE_URL` — `https://<project-ref>.supabase.co`
+- `SUPABASE_ANON_KEY` — anon public key
+
+**Jangan pernah** memakai/menyimpan `service_role`.
+
+## Alur perangkat (TV)
+
+1. TV memanggil `register_device()` → dapat `pairing_code` 6 digit, berlaku 10 menit.
+2. Admin membuka panel → masukkan kode → RPC `pair_device(code)`.
+3. TV polling `device_heartbeat()`; bila `status = paired`, TV mengunduh snapshot.
+4. Perintah dari admin diambil lewat `claim_commands()`, ditutup dengan
+   `complete_command()`.
+
+## Catatan keamanan
+
+- Semua tabel memakai RLS. Perangkat paired hanya bisa **membaca** konten
+  `published` + `active`, ticker aktif, dan settings.
+- Perangkat tidak punya policy `UPDATE` bebas; perubahan status hanya lewat RPC
+  `security definer`.
+- `audit_log` hanya bisa dibaca admin; penulisan lewat trigger definer.
+- Storage `tv-media` privat; TV memakai signed URL 7 hari dan menyimpan cache.
+
+
+================================================================
+END OF DUMP - 32 files, 3301 lines total
+================================================================

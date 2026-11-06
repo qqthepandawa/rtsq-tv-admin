@@ -1,0 +1,3 @@
+# Cloudflare Pages: semua rute diserahkan ke Flutter (path URL strategy).
+# Tanpa ini, /pair?code=123456 akan 404 saat tautan QR dibuka.
+/*    /index.html    200

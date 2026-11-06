@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Panel admin RTSQ TV - kelola konten, ticker, perangkat, dan pengaturan layar TV.">
+  <meta name="theme-color" content="#0E1B17">
+
+  <!-- iOS / PWA -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RTSQ TV Admin">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <title>RTSQ TV · Panel Admin</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #F4F6F5;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+    #boot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      flex-direction: column;
+      gap: 16px;
+      color: #4B5F57;
+    }
+    #boot .mark {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: #0E1B17;
+      color: #C9AE5C;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 17px;
+      letter-spacing: 1px;
+    }
+    #boot .bar {
+      width: 160px;
+      height: 4px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #DCE3E0;
+    }
+    #boot .bar span {
+      display: block;
+      width: 40%;
+      height: 100%;
+      border-radius: 999px;
+      background: #0F8F7F;
+      animation: slide 1.1s ease-in-out infinite alternate;
+    }
+    @keyframes slide {
+      from { transform: translateX(-10%); }
+      to { transform: translateX(160%); }
+    }
+  </style>
+</head>
+<body>
+  <div id="boot">
+    <div class="mark">RTSQ</div>
+    <div class="bar"><span></span></div>
+    <div style="font-size: 13px;">Menyiapkan panel admin…</div>
+  </div>
+
+  <script>
+    // Hapus splash HTML setelah frame pertama Flutter tampil, agar layar
+    // tidak tertutup lapisan loading terus-menerus.
+    window.addEventListener('flutter-first-frame', function () {
+      var boot = document.getElementById('boot');
+      if (boot) boot.remove();
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

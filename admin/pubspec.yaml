@@ -1,0 +1,45 @@
+name: rtsq_admin
+description: "Panel admin RTSQ TV - kelola konten, ticker, perangkat, dan pengaturan."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.18.3
+  go_router: ^17.5.0
+  intl: ^0.20.2
+  file_picker: ^13.3.2
+  image: ^4.12.0
+  crypto: ^3.0.8
+  url_launcher: ^6.3.3
+  adhan: ^2.0.0+1
+  hijri: ^3.0.1
+  http: ^1.6.0
+  flutter_web_plugins:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/brand/
+
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Variable.ttf
+    - family: Amiri
+      fonts:
+        - asset: assets/fonts/Amiri-Regular.ttf
+        - asset: assets/fonts/Amiri-Bold.ttf
+          weight: 700
