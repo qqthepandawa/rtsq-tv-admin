@@ -113,6 +113,12 @@ setelah ayat terakhir sebuah surah, bukan berhenti. Mode **"Ulangi surah ∞"**
 tetap mengulang surah yang sama, dan pada surah terakhir (114) pemutaran
 berhenti seperti sebelumnya.
 
+**Verifikasi di TV (v0.3.0, build ulang).** Panel dibuka dengan ▲ menampilkan
+baris **Suara Video** (`docs/screenshots/tv-panel-2.png`); menekan OK mengubah
+subjudul menjadi "Nyala · OK untuk mematikan" tanpa menutup panel
+(`docs/screenshots/tv-panel-3.png`). Preferensi bersifat runtime: kembali ke
+**Mati** setiap aplikasi dimulai.
+
 ## 3. Penyelesaian Blocker HOME (Fase sebelumnya)
 
 Kandidat HOME saat itu:
@@ -249,8 +255,18 @@ Perbaikan:
 - **Keluar darurat**: **tahan BACK 5 detik** → dialog PIN → masukkan `2468`
   → Pengaturan Android terbuka. (PIN ada di `tv_bootstrap.dart` `_kioskPin`.)
 - Tombol lain: kiri/kanan = ganti slide; OK tahan 2 detik = panel murottal.
-- **Pratinjau admin**: buka halaman Preview di web admin; kanvas 1920×1080
-  sudah mengikuti tata letak TV (16:9, panel sholat vertikal, header ramping).
+- **Pratinjau admin**: buka halaman Preview di web admin
+  (`https://main.rtsq-tv-admin.pages.dev`); kanvas 1920×1080 sudah mengikuti
+  tata letak TV (16:9, panel sholat vertikal, header ramping).
+- **Deploy admin web**: Cloudflare Pages proyek ini memakai **direct upload**
+  (auto-build dari Git tidak berfungsi, lihat `docs/Fase 3 - Laporan.md` §4).
+  `git push` **tidak** otomatis men-deploy. Setiap kali admin berubah:
+  ```
+  cd "C:\RTSQ TV\admin"
+  flutter build web --release
+  cd build\web
+  npx wrangler pages deploy . --project-name rtsq-tv-admin --branch main --commit-dirty=true
+  ```
 
 ### Diagnostik tombol (bila ada tombol "diam")
 ```
