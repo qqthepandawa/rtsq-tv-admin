@@ -3,7 +3,9 @@
 Tanggal: 2026-11-11 (diperbarui)
 Status: **SELESAI & terverifikasi di TV.** RTSQ TV = beranda; tombol HOME,
 dock aplikasi, ikon merek, dan **panel pengaturan cepat (sidebar)** berfungsi.
-Pratinjau admin sudah disamakan dengan tata letak aplikasi.
+Pratinjau admin sudah disamakan dengan tata letak aplikasi. Video kini berjalan
+sampai habis (tanpa batas 120 detik) dengan kontrol suara bawaan **mati**, dan
+murottal **lanjut otomatis ke surah berikutnya**.
 
 ---
 
@@ -30,7 +32,7 @@ Pratinjau admin sudah disamakan dengan tata letak aplikasi.
 | BACK singkat | `input keyevent KEYCODE_BACK` | tidak keluar app (tetap RTSQ) |
 | Tahan nyala ulang | reboot TV | RTSQ tampil otomatis (BootReceiver) + HOME ke RTSQ |
 
-Build: `flutter analyze` bersih; `flutter test` **43/43 lolos**.
+Build: `flutter analyze` bersih; `flutter test` **44/44 lolos**.
 
 ## 2A. Panel Pengaturan Cepat (pengganti sidebar Google TV)
 
@@ -90,6 +92,26 @@ Catatan: tombol HOME/GEAR/AUDIO yang tidak berfungsi sebelum perubahan
 launcher pun tetap tidak berfungsi — bukan regresi dari RTSQ. Tombol GEAR
 baru terasa "hilang" karena sidebar Google TV yang dulu ia buka sudah tidak
 aktif.
+
+## 2C. Pemutaran Video & Murottal
+
+**Video tanpa batas waktu.** Sebelumnya video dipotong di 120 detik. Sekarang
+video diputar **sampai habis** (tidak di-loop), lalu slideshow lanjut otomatis
+lewat `onMediaComplete`. Jaring pengaman: bila berkas video gagal dimuat, slide
+tetap lanjut setelah 8 detik agar antrean tidak macet.
+
+**Kontrol suara video (bawaan mati).** Preferensi runtime `AppPrefs.videoSound`
+(bawaan `false`) mengatur volume pemutar video (`1` nyala / `0` mati). Baris
+**"Suara Video"** ditambahkan di panel pengaturan cepat (tepat sebelum
+"Pengaturan Lengkap"); ▲/▼ memilih, **OK menyalakan/mematikan** tanpa menutup
+panel, dan subjudulnya berubah (Mati ⇄ Nyala). Bawaan mati supaya murottal
+tetap terdengar sambil video berjalan.
+
+**Murottal lanjut ke surah berikutnya.** Mode **"Lanjut otomatis"**
+(`MurottalRepeat.off`) kini berpindah ke **surah berikutnya** (mulai ayat 1)
+setelah ayat terakhir sebuah surah, bukan berhenti. Mode **"Ulangi surah ∞"**
+tetap mengulang surah yang sama, dan pada surah terakhir (114) pemutaran
+berhenti seperti sebelumnya.
 
 ## 3. Penyelesaian Blocker HOME (Fase sebelumnya)
 
@@ -186,6 +208,24 @@ Perbaikan:
   16:9, ticker; parameter `fixedNow` untuk golden.
 - `admin/test/tv_preview_golden_test.dart` + golden
   `admin/test/goldens/tv_preview_1920x1080.png` — **baru**.
+- `admin/lib/features/content/content_editor_page.dart` — keterangan Media
+  video: tanpa batas 120 detik + catatan kontrol suara (bawaan mati).
+- `admin/lib/features/preview/preview_page.dart` — keterangan zona disamakan
+  (header 140 · sholat 420 kiri · konten 16:9 · ticker 100).
+
+### Perubahan sesi ini (video & murottal)
+- `lib/core/app_prefs.dart` — **baru**: `AppPrefs.videoSound` (bawaan `false`).
+- `lib/features/slideshow/slideshow_panel.dart` — hapus batas 120 detik; timer
+  memakai durasi penuh; volume mengikuti `AppPrefs.videoSound`; timer gagal
+  muat 8 detik.
+- `lib/app/tv_shell.dart` — durasi slide video jadi jaring pengaman 1 jam;
+  `_activateSetting()` menangani baris **Suara Video**.
+- `lib/features/launcher/quick_settings.dart` — enum `QuickSettingKind` +
+  baris **Suara Video** (subjudul/ikon mengikuti keadaan).
+- `lib/features/murottal/murottal_controller.dart` — `_onCompleted()` dan
+  `nextAyah()` maju ke surah berikutnya pada mode "Lanjut otomatis".
+- `test/murottal_test.dart` — uji lanjut otomatis ke surah berikutnya.
+- `test/goldens/quick_settings_1920x1080.png` — golden diperbarui.
 
 ## 6. Kondisi TV & Cara Menyambung ADB
 

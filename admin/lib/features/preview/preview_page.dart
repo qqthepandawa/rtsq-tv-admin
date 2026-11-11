@@ -436,7 +436,7 @@ class _PreviewPageState extends State<PreviewPage> {
                       ),
                       const Spacer(),
                       Text(
-                        'Zona: header 180 · konten 616 · sholat 184 · ticker 100',
+                        'Zona: header 140 · sholat 420 (kiri) · konten 16:9 · ticker 100',
                         style: AdminText.caption.copyWith(
                           color: Colors.white70,
                           fontSize: 11,
