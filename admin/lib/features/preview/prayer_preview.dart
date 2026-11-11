@@ -22,8 +22,8 @@ class PreviewPrayer {
 /// Jadwal sholat untuk pratinjau admin.
 ///
 /// Kota Batam memakai data myquran/Kemenag (sama seperti TV). Kota lain
-/// memakai perhitungan `adhan` dengan parameter Kemenag dan ihtiyati dari
-/// pengaturan.
+/// memakai perhitungan `adhan` dengan parameter Kemenag (Subuh 20°, Isya 18°,
+/// ihtiyati 2 menit — parameter metode resmi, tetap).
 class PrayerPreviewService {
   PrayerPreviewService._();
 
@@ -72,11 +72,6 @@ class PrayerPreviewService {
       if (today == null) return null;
       final entries = [
         PreviewPrayer(
-          label: 'IMSAK',
-          time: today['imsak'] as String,
-          isPrayer: false,
-        ),
-        PreviewPrayer(
           label: 'SUBUH',
           time: today['subuh'] as String,
           isPrayer: true,
@@ -86,6 +81,7 @@ class PrayerPreviewService {
           time: today['terbit'] as String,
           isPrayer: false,
         ),
+        PreviewPrayer(label: 'DHUHA', time: _dhuhaTime(today), isPrayer: false),
         PreviewPrayer(
           label: 'DZUHUR',
           time: today['dzuhur'] as String,
@@ -120,11 +116,11 @@ class PrayerPreviewService {
       ishaAngle: 18.0,
       ishaInterval: 0,
       adjustments: PrayerAdjustments(
-        fajr: _ihtiyati(settings, 'subuh'),
-        dhuhr: _ihtiyati(settings, 'dzuhur'),
-        asr: _ihtiyati(settings, 'ashar'),
-        maghrib: _ihtiyati(settings, 'maghrib'),
-        isha: _ihtiyati(settings, 'isya'),
+        fajr: 2,
+        dhuhr: 2,
+        asr: 2,
+        maghrib: 2,
+        isha: 2,
       ),
     );
     final times = PrayerTimes(
@@ -133,15 +129,15 @@ class PrayerPreviewService {
       params,
       utcOffset: const Duration(hours: 7),
     );
-    final imsak = times.fajr.subtract(const Duration(minutes: 10));
+    final dhuha = times.sunrise.add(const Duration(minutes: 27));
     return [
-      PreviewPrayer(label: 'IMSAK', time: _hhmm(imsak), isPrayer: false),
       PreviewPrayer(label: 'SUBUH', time: _hhmm(times.fajr), isPrayer: true),
       PreviewPrayer(
         label: 'SYURUQ',
         time: _hhmm(times.sunrise),
         isPrayer: false,
       ),
+      PreviewPrayer(label: 'DHUHA', time: _hhmm(dhuha), isPrayer: false),
       PreviewPrayer(label: 'DZUHUR', time: _hhmm(times.dhuhr), isPrayer: true),
       PreviewPrayer(label: 'ASHAR', time: _hhmm(times.asr), isPrayer: true),
       PreviewPrayer(
@@ -153,8 +149,21 @@ class PrayerPreviewService {
     ];
   }
 
-  static int _ihtiyati(SettingsRow settings, String key) =>
-      (settings.ihtiyati[key] as num?)?.toInt() ?? 0;
+  /// Waktu Dhuha dari myquran; data lama tanpa kolom `dhuha` memakai
+  /// perkiraan syuruq + 27 menit (sama seperti aplikasi TV).
+  static String _dhuhaTime(Map<String, dynamic> jadwal) {
+    final value = (jadwal['dhuha'] as String? ?? '').trim();
+    if (value.isNotEmpty) return value;
+    final parts = (jadwal['terbit'] as String? ?? '06:00').split(':');
+    final base = Duration(
+      hours: int.tryParse(parts.first) ?? 6,
+      minutes: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
+    );
+    final dhuha = base + const Duration(minutes: 27);
+    final hh = (dhuha.inHours % 24).toString().padLeft(2, '0');
+    final mm = dhuha.inMinutes.remainder(60).toString().padLeft(2, '0');
+    return '$hh:$mm';
+  }
 
   static String _hhmm(DateTime time) =>
       '${time.hour.toString().padLeft(2, '0')}:'

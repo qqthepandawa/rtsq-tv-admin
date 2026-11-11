@@ -251,7 +251,7 @@ class _DevicesPageState extends State<DevicesPage> {
       title: 'Perangkat',
       subtitle:
           'Pasangkan, ganti nama, kirim perintah, atau cabut akses TV. '
-          'Status online berdasarkan heartbeat < 3 menit.',
+          'Status online berdasarkan heartbeat < 10 menit.',
       actions: [
         OutlinedButton.icon(
           onPressed: _load,
@@ -470,8 +470,16 @@ class _DeviceRow extends StatelessWidget {
               if (device.isPaired) ...[
                 const PopupMenuDivider(),
                 const PopupMenuItem(
-                  value: 'reload',
+                  value: 'reload_content',
                   child: Text('Muat ulang konten'),
+                ),
+                const PopupMenuItem(
+                  value: 'reload_settings',
+                  child: Text('Muat ulang pengaturan'),
+                ),
+                const PopupMenuItem(
+                  value: 'reload_prayer',
+                  child: Text('Muat ulang jadwal sholat'),
                 ),
                 const PopupMenuItem(
                   value: 'restart_app',
@@ -480,6 +488,14 @@ class _DeviceRow extends StatelessWidget {
                 const PopupMenuItem(
                   value: 'screenshot',
                   child: Text('Minta tangkapan layar'),
+                ),
+                const PopupMenuItem(
+                  value: 'test_screen',
+                  child: Text('Uji layar'),
+                ),
+                const PopupMenuItem(
+                  value: 'clear_cache',
+                  child: Text('Bersihkan cache media'),
                 ),
                 const PopupMenuItem(
                   value: 'sync',

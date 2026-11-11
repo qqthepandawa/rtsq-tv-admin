@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -27,6 +29,7 @@ class _ContentPageState extends State<ContentPage> {
   List<TickerItem> _ticker = const [];
   SettingsRow _settings = const SettingsRow();
   List<PreviewPrayer> _prayers = const [];
+  final Map<String, String> _thumbs = {};
   bool _loading = true;
   String? _error;
   String _filter = 'all';
@@ -52,18 +55,20 @@ class _ContentPageState extends State<ContentPage> {
         _repo.fetchTicker(),
       ]);
       final settings = results[1] as SettingsRow;
+      final contents = results[0] as List<ContentItem>;
       final prayers = await PrayerPreviewService.load(
         settings,
         Wib.toWib(Wib.now()),
       );
       if (!mounted) return;
       setState(() {
-        _contents = results[0] as List<ContentItem>;
+        _contents = contents;
         _settings = settings;
         _ticker = results[2] as List<TickerItem>;
         _prayers = prayers;
         _error = null;
       });
+      unawaited(_resolveThumbs(contents));
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = errorText(error));
@@ -78,9 +83,27 @@ class _ContentPageState extends State<ContentPage> {
       if (_filter == 'published' && !item.isPublished) return false;
       if (_filter == 'draft' && item.isPublished) return false;
       if (query.isEmpty) return true;
-      return item.title.toLowerCase().contains(query) ||
-          item.body.toLowerCase().contains(query);
+      return item.displayTitle.toLowerCase().contains(query) ||
+          item.body.toLowerCase().contains(query) ||
+          (item.primaryMediaName ?? '').toLowerCase().contains(query);
     }).toList();
+  }
+
+  /// Thumbnail daftar konten. Dimuat terpisah agar daftar tidak menunggu
+  /// banyak permintaan tanda tangan URL.
+  Future<void> _resolveThumbs(List<ContentItem> items) async {
+    final loaded = <String, String>{};
+    for (final item in items) {
+      final id = item.id;
+      final media = item.primaryMedia;
+      if (id == null || media == null || !media.type.startsWith('image')) {
+        continue;
+      }
+      final url = await _repo.signedUrl(media.thumbPath ?? media.path);
+      if (url != null) loaded[id] = url;
+    }
+    if (!mounted || loaded.isEmpty) return;
+    setState(() => _thumbs.addAll(loaded));
   }
 
   String get _tickerText {
@@ -191,11 +214,15 @@ class _ContentPageState extends State<ContentPage> {
   }
 
   Future<void> _delete(ContentItem item) async {
+    final mediaName = item.primaryMediaName;
+    final label = mediaName == null
+        ? item.displayTitle
+        : '${item.displayTitle} ($mediaName)';
     final ok = await confirmDialog(
       context,
       title: 'Hapus konten?',
       message:
-          '"${item.title}" akan dihapus permanen dari panel dan TV. '
+          '"$label" akan dihapus permanen dari panel dan TV. '
           'Media yang sudah diunggah tidak ikut terhapus otomatis.',
       confirmLabel: 'Hapus',
       danger: true,
@@ -248,7 +275,7 @@ class _ContentPageState extends State<ContentPage> {
                     controller: _search,
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
-                      hintText: 'Cari judul atau isi…',
+                      hintText: 'Cari judul, isi, atau nama berkas…',
                       prefixIcon: Icon(Icons.search, size: 18),
                     ),
                   ),
@@ -304,6 +331,7 @@ class _ContentPageState extends State<ContentPage> {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: _ContentTile(
                       item: visible[i],
+                      imageUrl: _thumbs[visible[i].id],
                       position: _contents.indexOf(visible[i]) + 1,
                       onEdit: () => context.go('/content/${visible[i].id}'),
                       onPreview: () => _preview(visible[i]),
@@ -319,6 +347,42 @@ class _ContentPageState extends State<ContentPage> {
               ],
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _ContentThumb extends StatelessWidget {
+  const _ContentThumb({required this.item, this.imageUrl});
+
+  final ContentItem item;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final isVideo = item.type == 'video';
+    final placeholder = Container(
+      width: 64,
+      height: 44,
+      color: AdminColors.panel,
+      child: Icon(
+        isVideo ? Icons.videocam_outlined : Icons.image_outlined,
+        size: 20,
+        color: Colors.white70,
+      ),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: 64,
+        height: 44,
+        child: imageUrl == null
+            ? placeholder
+            : Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => placeholder,
+              ),
       ),
     );
   }
@@ -365,6 +429,7 @@ class _ContentTile extends StatelessWidget {
   const _ContentTile({
     required this.item,
     required this.position,
+    this.imageUrl,
     required this.onEdit,
     required this.onPreview,
     required this.onPublish,
@@ -375,6 +440,7 @@ class _ContentTile extends StatelessWidget {
   });
 
   final ContentItem item;
+  final String? imageUrl;
   final int position;
   final VoidCallback onEdit;
   final VoidCallback onPreview;
@@ -402,6 +468,11 @@ class _ContentTile extends StatelessWidget {
                 ),
               ),
             ),
+            if (item.media.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              _ContentThumb(item: item, imageUrl: imageUrl),
+              const SizedBox(width: 12),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,18 +503,41 @@ class _ContentTile extends StatelessWidget {
                           label: 'Nonaktif',
                           tone: PillTone.danger,
                         ),
+                      if (item.isMediaContent && !item.showCaption)
+                        const StatusPill(
+                          label: 'Tanpa teks di TV',
+                          tone: PillTone.neutral,
+                          icon: Icons.visibility_off_outlined,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 7),
                   InkWell(
                     onTap: onEdit,
                     child: Text(
-                      item.title.trim().isEmpty
-                          ? '(Tanpa judul)'
-                          : item.title.trim(),
-                      style: AdminText.h2.copyWith(fontSize: 17),
+                      item.displayTitle,
+                      style: item.title.trim().isEmpty
+                          ? AdminText.h2.copyWith(
+                              fontSize: 17,
+                              color: AdminColors.inkSoft,
+                              fontStyle: FontStyle.italic,
+                            )
+                          : AdminText.h2.copyWith(fontSize: 17),
                     ),
                   ),
+                  if (item.primaryMediaName != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      [
+                        item.primaryMediaName!,
+                        if (item.media.length > 1)
+                          '+${item.media.length - 1} media lain',
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AdminText.caption.copyWith(fontSize: 12),
+                    ),
+                  ],
                   if (item.body.trim().isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Text(

@@ -41,11 +41,15 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
   List<ScheduleItem> _schedule = [];
   List<MediaItem> _media = [];
   Map<String, String> _mediaUrls = {};
+  Map<String, String> _thumbUrls = {};
   int _priority = 0;
   int _sortOrder = 0;
   bool _pinned = false;
   bool _active = true;
   bool _published = false;
+  bool _consentConfirmed = false;
+  bool _showCaption = true;
+  bool _captionTouched = false;
 
   SettingsRow _settings = const SettingsRow();
   List<PreviewPrayer> _prayers = const [];
@@ -131,16 +135,53 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
     _pinned = item.pinned;
     _active = item.active;
     _published = item.isPublished;
+    _consentConfirmed = item.consentConfirmed;
+    // Foto/video tanpa teks tidak perlu izin tampil; mulai dengan teks TV
+    // nonaktif agar judul yang ditambahkan kemudian tidak langsung tayang.
+    _showCaption =
+        item.isMediaContent &&
+            item.title.trim().isEmpty &&
+            item.body.trim().isEmpty
+        ? false
+        : item.showCaption;
+    _captionTouched = false;
+  }
+
+  /// Foto/video baru memulai dengan teks TV nonaktif agar judul/keterangan
+  /// tidak tampil tanpa persetujuan admin. Pilihan manual tidak ditimpa saat
+  /// jenis konten diganti.
+  void _selectType(String type) {
+    setState(() {
+      final wasMedia = _type == 'photo' || _type == 'video';
+      final isMedia = type == 'photo' || type == 'video';
+      _type = type;
+      if (_captionTouched) return;
+      if (isMedia && !wasMedia) {
+        _showCaption = false;
+      } else if (!isMedia) {
+        _showCaption = true;
+      }
+    });
   }
 
   Future<void> _resolveUrls() async {
-    final urls = <String, String>{};
+    final full = <String, String>{};
+    final thumbs = <String, String>{};
     for (final item in _media) {
       if (!item.type.startsWith('image')) continue;
-      final url = await _repo.signedUrl(item.thumbPath ?? item.path);
-      if (url != null) urls[item.path] = url;
+      final fullUrl = await _repo.signedUrl(item.path);
+      if (fullUrl != null) full[item.path] = fullUrl;
+      final thumbUrl = item.thumbPath == null
+          ? fullUrl
+          : await _repo.signedUrl(item.thumbPath!);
+      if (thumbUrl != null) thumbs[item.path] = thumbUrl;
     }
-    if (mounted) setState(() => _mediaUrls = urls);
+    if (mounted) {
+      setState(() {
+        _mediaUrls = full;
+        _thumbUrls = thumbs;
+      });
+    }
   }
 
   ContentItem _buildItem() {
@@ -163,6 +204,8 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
       pinned: _pinned,
       active: _active,
       status: _published ? 'published' : 'draft',
+      consentConfirmed: _consentConfirmed,
+      showCaption: _showCaption,
     );
   }
 
@@ -183,8 +226,24 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
 
   Future<void> _save({bool publish = false}) async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if ((_type == 'photo' || _type == 'video') && _media.isEmpty) {
+      setState(
+        () => _error = _type == 'video'
+            ? 'Video wajib dilampirkan.'
+            : 'Gambar wajib dilampirkan.',
+      );
+      return;
+    }
     if (_startAt != null && _endAt != null && !_endAt!.isAfter(_startAt!)) {
       setState(() => _error = 'Waktu selesai harus setelah waktu mulai.');
+      return;
+    }
+    if (_student.text.trim().isNotEmpty && !_consentConfirmed) {
+      setState(
+        () => _error =
+            'Centang persetujuan orang tua/wali sebelum menyimpan konten '
+            'yang memuat nama santri.',
+      );
       return;
     }
     if (publish) _published = true;
@@ -218,10 +277,15 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
       context.go('/content');
       return;
     }
+    final item = _buildItem();
+    final mediaName = item.primaryMediaName;
+    final label = mediaName == null
+        ? item.displayTitle
+        : '${item.displayTitle} ($mediaName)';
     final ok = await confirmDialog(
       context,
       title: 'Hapus konten?',
-      message: 'Konten akan dihapus permanen dari panel dan TV.',
+      message: '"$label" akan dihapus permanen dari panel dan TV.',
       confirmLabel: 'Hapus',
       danger: true,
     );
@@ -343,24 +407,26 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
                           label: entry.$2,
                           icon: entry.$3,
                           selected: _type == entry.$1,
-                          onTap: () => setState(() => _type = entry.$1),
+                          onTap: () => _selectType(entry.$1),
                         ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
                 LabeledField(
-                  label: 'Judul',
+                  label: 'Judul (opsional)',
+                  hint: _type == 'photo' || _type == 'video'
+                      ? 'Judul tetap tersimpan untuk panel. Tampil di TV hanya '
+                            'bila opsi teks di bawah diaktifkan.'
+                      : 'Bila dikosongkan, konten tetap tampil tanpa judul.',
                   child: TextFormField(
                     controller: _title,
                     textInputAction: TextInputAction.next,
+                    maxLength: 120,
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       hintText: 'Contoh: Pendaftaran Santri Baru 2026',
                     ),
-                    validator: (value) => (value ?? '').trim().isEmpty
-                        ? 'Judul wajib diisi.'
-                        : null,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -373,12 +439,45 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
                     controller: _body,
                     minLines: 3,
                     maxLines: 6,
+                    maxLength: 600,
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       hintText: 'Tuliskan informasi singkat…',
                     ),
                   ),
                 ),
+                if (_type == 'photo' || _type == 'video') ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AdminColors.bg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AdminColors.line),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Tampilkan judul & keterangan di TV'),
+                      subtitle: Text(
+                        _title.text.trim().isEmpty && _body.text.trim().isEmpty
+                            ? 'Belum ada judul/keterangan. Selama keduanya '
+                                  'kosong, foto/video tetap tampil penuh di TV.'
+                            : _showCaption
+                            ? 'Teks tampil di samping media sehingga area foto '
+                                  'menyempit. Aktifkan hanya bila isinya sudah '
+                                  'mendapat izin untuk ditampilkan.'
+                            : 'Foto/video tampil penuh 16:9 tanpa teks. Judul & '
+                                  'keterangan tetap tersimpan dan hanya terlihat '
+                                  'di panel ini.',
+                      ),
+                      value: _showCaption,
+                      onChanged: (value) => setState(() {
+                        _captionTouched = true;
+                        _showCaption = value;
+                      }),
+                    ),
+                  ),
+                ],
                 if (_type == 'achievement') ...[
                   const SizedBox(height: 16),
                   Row(
@@ -389,6 +488,7 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
                           label: 'Nama santri',
                           child: TextFormField(
                             controller: _student,
+                            maxLength: 80,
                             onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
                               hintText: 'Nama lengkap',
@@ -402,6 +502,7 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
                           label: 'Marhalah',
                           child: TextFormField(
                             controller: _marhalah,
+                            maxLength: 40,
                             onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
                               hintText: 'Contoh: Marhalah 2',
@@ -420,6 +521,7 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
                           label: 'Predikat',
                           child: TextFormField(
                             controller: _achievement,
+                            maxLength: 80,
                             onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
                               hintText: 'Jayyid Jiddan / 7 Juz',
@@ -439,6 +541,20 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
                         ),
                       ),
                     ],
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text(
+                      'Persetujuan orang tua/wali sudah diperoleh',
+                    ),
+                    subtitle: const Text(
+                      'Wajib dicentang sebelum konten yang memuat nama santri '
+                      'disimpan atau ditayangkan.',
+                    ),
+                    value: _consentConfirmed,
+                    onChanged: (value) =>
+                        setState(() => _consentConfirmed = value ?? false),
                   ),
                 ],
                 if (_type == 'schedule') ...[
@@ -485,14 +601,19 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
         SectionCard(
           title: 'Media',
           subtitle: _type == 'video'
-              ? 'Video MP4 maksimal 60 MB. TV memutar ulang otomatis.'
-              : 'Gambar dikompres ke maksimal 1920 px, JPEG kualitas 85.',
+              ? 'Video MP4 maksimal 60 MB dan 120 detik. Diputar sekali, '
+                    'lalu slideshow lanjut otomatis.'
+              : 'Gambar dikompres ke maksimal 1920 px, JPEG kualitas 85. '
+                    'Rasio ideal 16:9 (1920×1080); foto tegak 4:5 atau 3:4 '
+                    'tetap tampil utuh.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (_media.isEmpty)
                 Text(
-                  _type == 'video' ? 'Belum ada video.' : 'Belum ada gambar.',
+                  _type == 'video'
+                      ? 'Belum ada video (wajib untuk konten video).'
+                      : 'Belum ada gambar (wajib untuk konten foto).',
                   style: AdminText.caption,
                 ),
               for (final item in _media)
@@ -507,11 +628,11 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
                   child: Row(
                     children: [
                       if (item.type.startsWith('image') &&
-                          _mediaUrls[item.path] != null)
+                          _thumbUrls[item.path] != null)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: Image.network(
-                            _mediaUrls[item.path]!,
+                            _thumbUrls[item.path]!,
                             width: 56,
                             height: 38,
                             fit: BoxFit.cover,
@@ -737,6 +858,11 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
               ),
               _SummaryRow(label: 'Media', value: '${_media.length} berkas'),
               _SummaryRow(label: 'Agenda', value: '${_schedule.length} item'),
+              if (_type == 'photo' || _type == 'video')
+                _SummaryRow(
+                  label: 'Teks di TV',
+                  value: _showCaption ? 'Ditampilkan' : 'Disembunyikan',
+                ),
             ],
           ),
         ),

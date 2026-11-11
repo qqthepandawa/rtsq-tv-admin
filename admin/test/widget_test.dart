@@ -54,6 +54,56 @@ void main() {
       expect(map['media'], hasLength(1));
     });
 
+    test('payload dapat menyembunyikan consent_confirmed', () {
+      const item = ContentItem(
+        type: 'photo',
+        title: '',
+        consentConfirmed: true,
+      );
+
+      expect(item.toMap(), containsPair('consent_confirmed', true));
+      expect(
+        item.toMap(includeConsent: false).containsKey('consent_confirmed'),
+        isFalse,
+      );
+    });
+
+    test('izin teks TV tersimpan dan konten tanpa judul tetap dikenali', () {
+      final item = ContentItem.fromMap({
+        'type': 'photo',
+        'title': '',
+        'show_caption': false,
+        'media': [
+          {
+            'path': 'contents/aula.jpg',
+            'type': 'image/jpeg',
+            'name': 'aula.jpg',
+            'thumb': 'contents/aula-thumb.jpg',
+          },
+        ],
+      });
+
+      expect(item.showCaption, isFalse);
+      expect(item.captionVisible, isFalse);
+      expect(item.displayTitle, 'Foto tanpa judul');
+      expect(item.primaryMediaName, 'aula.jpg');
+      expect(item.toMap()['show_caption'], isFalse);
+
+      // Baris lama tanpa kolom show_caption tetap menampilkan teks.
+      final legacy = ContentItem.fromMap(const {'type': 'photo'});
+      expect(legacy.showCaption, isTrue);
+      expect(legacy.captionVisible, isTrue);
+    });
+
+    test('pengumuman selalu menampilkan teksnya', () {
+      const item = ContentItem(
+        type: 'announcement',
+        title: 'Info',
+        showCaption: false,
+      );
+      expect(item.captionVisible, isTrue);
+    });
+
     test('status perangkat online memakai batas 3 menit', () {
       final device = Device.fromMap({
         'id': 'd1',
@@ -84,19 +134,18 @@ void main() {
       final settings = SettingsRow.fromMap(const {});
       expect(settings.city, 'Batam');
       expect(settings.slideDurationSeconds, 10);
-      expect(settings.iqamahMinutes['maghrib'], 7);
-      expect(settings.prayerModeEnabled['subuh'], isTrue);
+      expect(settings.tickerSpeed, 60);
     });
 
-    test('round trip mempertahankan ihtiyati dan darurat', () {
+    test('round trip mempertahankan Hijriah dan darurat', () {
       final settings = SettingsRow(
         orgName: 'RTSQ Batam',
-        ihtiyati: const {'subuh': 2},
+        hijriOffset: const {'default': -1},
         emergency: const {'active': true, 'title': 'Listrik padam'},
       );
       final restored = SettingsRow.fromMap(settings.toMap());
       expect(restored.orgName, 'RTSQ Batam');
-      expect(restored.ihtiyati['subuh'], 2);
+      expect(restored.hijriOffset['default'], -1);
       expect(restored.emergency?['title'], 'Listrik padam');
     });
   });

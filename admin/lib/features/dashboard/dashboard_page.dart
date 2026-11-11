@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../app/session.dart';
 import '../../app/widgets.dart';
@@ -28,6 +29,7 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _loading = true;
   String? _error;
   Timer? _timer;
+  RealtimeChannel? _channel;
 
   @override
   void initState() {
@@ -37,11 +39,34 @@ class _DashboardPageState extends State<DashboardPage> {
       const Duration(seconds: 30),
       (_) => _load(silent: true),
     );
+    _subscribe();
+  }
+
+  void _subscribe() {
+    try {
+      final client = Supabase.instance.client;
+      final channel = client.channel('admin-dashboard');
+      for (final table in const ['devices', 'contents', 'ticker', 'settings']) {
+        channel.onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: table,
+          callback: (_) => _load(silent: true),
+        );
+      }
+      channel.subscribe();
+      _channel = channel;
+    } catch (_) {
+      // Realtime opsional; polling 30 detik tetap berjalan.
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    final channel = _channel;
+    _channel = null;
+    if (channel != null) channel.unsubscribe();
     super.dispose();
   }
 

@@ -9,9 +9,6 @@ import '../../data/admin_repository.dart';
 import '../../data/models.dart';
 import '../preview/prayer_preview.dart';
 
-const _prayerKeys = <String>['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'];
-const _prayerLabels = <String>['Subuh', 'Dzuhur', 'Ashar', 'Maghrib', 'Isya'];
-
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.session});
 
@@ -30,15 +27,9 @@ class _SettingsPageState extends State<SettingsPage> {
   final _city = TextEditingController();
   final _latitude = TextEditingController();
   final _longitude = TextEditingController();
-  final _khutbah = TextEditingController();
-  final _prayerDuration = TextEditingController();
   final _slideDuration = TextEditingController();
   final _tickerSpeed = TextEditingController();
   final _hijriOffset = TextEditingController();
-
-  final _ihtiyati = <String, TextEditingController>{};
-  final _iqamah = <String, TextEditingController>{};
-  final _prayerMode = <String, bool>{};
 
   final _emergencyTitle = TextEditingController();
   final _emergencyBody = TextEditingController();
@@ -58,10 +49,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    for (final key in _prayerKeys) {
-      _ihtiyati[key] = TextEditingController();
-      _iqamah[key] = TextEditingController();
-    }
     _load();
   }
 
@@ -73,15 +60,11 @@ class _SettingsPageState extends State<SettingsPage> {
       _city,
       _latitude,
       _longitude,
-      _khutbah,
-      _prayerDuration,
       _slideDuration,
       _tickerSpeed,
       _hijriOffset,
       _emergencyTitle,
       _emergencyBody,
-      ..._ihtiyati.values,
-      ..._iqamah.values,
     ]) {
       controller.dispose();
     }
@@ -119,19 +102,10 @@ class _SettingsPageState extends State<SettingsPage> {
     _city.text = settings.city;
     _latitude.text = settings.latitude.toString();
     _longitude.text = settings.longitude.toString();
-    _khutbah.text = settings.khutbahMinutes.toString();
-    _prayerDuration.text = settings.prayerDurationMinutes.toString();
     _slideDuration.text = settings.slideDurationSeconds.toString();
     _tickerSpeed.text = settings.tickerSpeed.toString();
     _hijriOffset.text =
         (settings.hijriOffset['default'] as num?)?.toInt().toString() ?? '0';
-    for (final key in _prayerKeys) {
-      _ihtiyati[key]!.text =
-          (settings.ihtiyati[key] as num?)?.toInt().toString() ?? '0';
-      _iqamah[key]!.text =
-          (settings.iqamahMinutes[key] as num?)?.toInt().toString() ?? '0';
-      _prayerMode[key] = settings.prayerModeEnabled[key] as bool? ?? true;
-    }
     final emergency = settings.emergency;
     _emergencyActive = emergency?['active'] as bool? ?? false;
     _emergencyTitle.text = emergency?['title'] as String? ?? '';
@@ -149,22 +123,13 @@ class _SettingsPageState extends State<SettingsPage> {
       longitude:
           double.tryParse(_longitude.text.replaceAll(',', '.')) ?? 104.05,
       timezone: 'Asia/Jakarta',
-      hijriOffset: {'default': int.tryParse(_hijriOffset.text) ?? 0},
-      ihtiyati: {
-        for (final key in _prayerKeys)
-          key: int.tryParse(_ihtiyati[key]!.text) ?? 0,
+      hijriOffset: {
+        // Pertahankan offset per bulan yang diatur lewat SQL/alat lain.
+        ..._loaded.hijriOffset,
+        'default': int.tryParse(_hijriOffset.text) ?? 0,
       },
-      iqamahMinutes: {
-        for (final key in _prayerKeys)
-          key: int.tryParse(_iqamah[key]!.text) ?? 0,
-      },
-      khutbahMinutes: int.tryParse(_khutbah.text) ?? 15,
-      prayerDurationMinutes: int.tryParse(_prayerDuration.text) ?? 12,
       slideDurationSeconds: int.tryParse(_slideDuration.text) ?? 10,
-      tickerSpeed: int.tryParse(_tickerSpeed.text) ?? 72,
-      prayerModeEnabled: {
-        for (final key in _prayerKeys) key: _prayerMode[key] ?? true,
-      },
+      tickerSpeed: int.tryParse(_tickerSpeed.text) ?? 60,
       emergency: {
         'active': _emergencyActive,
         'title': _emergencyTitle.text.trim(),
@@ -240,8 +205,8 @@ class _SettingsPageState extends State<SettingsPage> {
     return PageScaffold(
       title: 'Pengaturan',
       subtitle: widget.session.isSuper
-          ? 'Hanya admin utama yang dapat mengubah pengaturan tampilan dan '
-                'jadwal.'
+          ? 'Hanya admin utama yang dapat mengubah pengaturan tampilan '
+                'dan jadwal.'
           : 'Anda masuk sebagai editor. Pengaturan hanya dapat dilihat; '
                 'hubungi admin utama untuk mengubah.',
       actions: [
@@ -390,111 +355,6 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 14),
             SectionCard(
-              title: 'Ihtiyati & iqamah',
-              subtitle:
-                  'Ihtiyati ditambahkan ke waktu sholat. Iqamah dipakai '
-                  'menghitung hitung mundur setelah adzan.',
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final wide = constraints.maxWidth > 700;
-                  return Column(
-                    children: [
-                      Row(
-                        children: [
-                          const SizedBox(width: 90),
-                          for (var i = 0; i < _prayerKeys.length; i++)
-                            Expanded(
-                              child: Center(
-                                child: Text(
-                                  _prayerLabels[i],
-                                  style: AdminText.label,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const SizedBox(
-                            width: 90,
-                            child: Text('Ihtiyati (mnt)'),
-                          ),
-                          for (final key in _prayerKeys)
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                child: _number(
-                                  _ihtiyati[key]!,
-                                  enabled: _canEdit,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const SizedBox(
-                            width: 90,
-                            child: Text('Iqamah (mnt)'),
-                          ),
-                          for (final key in _prayerKeys)
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                child: _number(
-                                  _iqamah[key]!,
-                                  enabled: _canEdit,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (!wide) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Geser tabel bila layar sempit.',
-                          style: AdminText.caption,
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 16,
-                        runSpacing: 8,
-                        children: [
-                          for (var i = 0; i < _prayerKeys.length; i++)
-                            SizedBox(
-                              width: 150,
-                              child: SwitchListTile(
-                                contentPadding: EdgeInsets.zero,
-                                dense: true,
-                                title: Text(
-                                  'Mode ${_prayerLabels[i]}',
-                                  style: AdminText.caption,
-                                ),
-                                value: _prayerMode[_prayerKeys[i]] ?? true,
-                                onChanged: _canEdit
-                                    ? (value) => setState(
-                                        () =>
-                                            _prayerMode[_prayerKeys[i]] = value,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 14),
-            SectionCard(
               title: 'Tampilan & waktu',
               child: Column(
                 children: [
@@ -516,30 +376,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _numberField(
-                          _prayerDuration,
-                          'Durasi mode sholat (menit)',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _numberField(
-                          _khutbah,
-                          'Durasi khutbah Jumat (menit)',
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _numberField(
                           _hijriOffset,
                           'Offset Hijriah (hari)',
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      const Expanded(child: SizedBox()),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -719,19 +559,6 @@ class _SettingsPageState extends State<SettingsPage> {
             ? (value) =>
                   (value ?? '').trim().isEmpty ? '$label wajib diisi.' : null
             : null,
-      ),
-    );
-  }
-
-  Widget _number(TextEditingController controller, {bool enabled = true}) {
-    return TextFormField(
-      controller: controller,
-      enabled: _canEdit && enabled,
-      textAlign: TextAlign.center,
-      keyboardType: TextInputType.number,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: const InputDecoration(
-        contentPadding: EdgeInsets.symmetric(vertical: 10),
       ),
     );
   }

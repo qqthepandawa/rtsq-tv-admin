@@ -1,8 +1,13 @@
-# Audit Kesesuaian — Blueprint RTSQ TV v2.1
+# Audit Kesesuaian — Blueprint RTSQ TV (v2.1 → v2.2)
 
-Tanggal audit: 5 November 2026
+Tanggal audit: 5 November 2026 (diperbarui 6 November 2026 untuk v2.2)
 Objek: `rtsq_tv` (Flutter) + `supabase/migrations`
 Metode: baca Blueprint §5–§13, lalu cocokkan dengan kode aktual (bukan ingatan).
+
+**Catatan v2.2 (6 Nov 2026):** TV lobi, bukan layar masjid. Mode sholat,
+iqamah, ihtiyati, khutbah, dan kolom pengaturan terkait dihapus dari blueprint,
+aplikasi TV, panel admin, dan skema database (`0009_remove_sholat_mode.sql`).
+Jadwal sholat kini murni pengingat masuknya waktu.
 
 ---
 
@@ -127,7 +132,7 @@ golden 1920×1080 (`tampilan utama`, `slide jadwal`).
 | Lokasi klien Supabase | `data/` (§10) | `core/supabase_client.dart` |
 | Struktur folder | `admin/`, `tools/`, `assets/prayer/`, `assets/mock/`, `AGENTS.md` | Belum ada |
 | Path Storage | `contents/{id}/…`, `screenshots/{id}/…` | Policy hanya membatasi bucket, belum prefix path |
-| Penandatanganan APK | — | Release masih memakai debug keystore |
+| Penandatanganan APK | keystore rilis terpisah | `android/key.properties` dibaca `build.gradle.kts`; tanpa berkas itu build rilis jatuh ke debug key (contoh di `android/key.properties.example`) |
 
 Catatan: `minSdk 24` dan latar `#07110E` bisa dianggap keputusan sadar, bukan
 cacat. Tetapi tipografi dan safe area berdampak langsung ke keterbacaan.
@@ -142,7 +147,7 @@ Semua ini memang belum dijadwalkan sampai fase berikutnya:
 - **Fase 0.5:** ADB wireless, data perangkat, `docs/tv-aqua.md`,
   `tools/provision_tv.ps1`, uji 2 jam.
 - **Fase 1:** `TimeService`, myquran/Kemenag + cache tahunan, fallback `adhan`,
-  ihtiyati, Hijriah + offset, mode iqamah/redup, unit test rollover/Jumat/offline.
+  Hijriah + offset, unit test rollover/Jumat/offline.
 - **Fase 2a:** anonymous sign-in, registrasi perangkat, layar pairing + QR,
   heartbeat, log, realtime/polling, snapshot atomik, unduh media + checksum,
   kuota 500 MB.
@@ -199,7 +204,8 @@ belum ada auth anonim, pairing, atau pembacaan konten.
 ### P1 — Fase 1
 
 TimeService UTC+7 + koreksi `Date`, jadwal myquran + cache, `adhan` fallback,
-ihtiyati, iqamah/redup, unit test rollover/Jumat/offline.
+jadwal myquran + cache, `adhan` fallback,
+dan unit test rollover/Jumat/offline.
 
 ### P2 — Fase 2a
 
@@ -259,7 +265,7 @@ berdampak pada Android TV 14), latar `#07110E`, dan lokasi klien Supabase di
 | Hitung mundur, highlight aktif/berikutnya | ✅ selesai | `PrayerService.activePrayerIndex()`, `nextPrayerIndex()`. |
 | Label Jumat pada Dzuhur | ✅ selesai | `prayer_strip.dart` (isFriday → 'JUMAT'). |
 | Hijriah dinamis + Maghrib rollover + offset | ✅ selesai | `lib/core/hijri.dart`, `formatHijri()` dipakai di `tv_shell.dart`. |
-| Iqamah default per waktu | ✅ selesai | `PrayerService.iqamahMinutes()` (Subuh 10, Dzuhur 10, Ashar 10, Maghrib 7, Isya 10). |
+| (v2.2) Iqamah/ihtiyati dihapus (TV lobi, bukan layar masjid) | ✅ selesai | `PrayerService` tidak lagi punya `iqamahMinutes()`; pengaturan di SQL/admin dihapus. |
 | Unit test rollover/Jumat/Hijriah/tipografi | ✅ selesai | `test/mock_data_test.dart`, `test/hijri_test.dart`, `test/typography_test.dart`. |
 | Aplikasi TV terhubung ke Supabase | ✅ selesai (Fase 2a) | Auth anonim, pairing, heartbeat, snapshot — lihat `docs/Fase 2a - Laporan.md`. |
 

@@ -13,15 +13,20 @@ Proyek Supabase terpisah dari RTSQ Mobile. Tidak ada Firestore, tidak ada
 
 Jalankan **berurutan** di SQL Editor (atau `supabase db push`):
 
-> Cara tercepat: buka `supabase/apply_all.sql` (gabungan 0001–0008, sudah
+> Cara tercepat: buka `supabase/apply_all.sql` (gabungan 0001–0010, sudah
 > dibungkus `begin; … commit;`), tempel seluruh isinya ke SQL Editor, lalu
 > **Run** sekali. Berkas itu dibuat ulang dengan
 > `node tools/build_apply_all.mjs`.
 >
 > **Jika paste terpotong** (mis. editor berhenti di baris tertentu), gunakan
-> folder `supabase/chunks/` — 10 berkas berurutan yang masing-masing < 175
-> baris. Jalankan `01.sql` sampai `10.sql`, satu per **Run**. Panduan ada di
+> folder `supabase/chunks/` — 14 berkas berurutan yang masing-masing < 175
+> baris. Jalankan `01.sql` sampai `14.sql`, satu per **Run**. Panduan ada di
 > `supabase/chunks/README.md`.
+>
+> **Perbaikan v2.2 (6 Nov 2026):** `0009_remove_sholat_mode.sql` menghapus
+> kolom `ihtiyati`, `iqamah_minutes`, `khutbah_minutes`,
+> `prayer_duration_minutes`, dan `prayer_mode_enabled` dari `settings`.
+> Jalankan sekali di SQL Editor (atau `11.sql` di folder chunks).
 >
 > **Perbaikan 5 Nov 2026:** blok `DO` di `0002` kini ditutup `end; $$;`
 > (PL/pgSQL mewajibkan titik koma), dan diff audit di `0003` memakai
@@ -38,6 +43,10 @@ Jalankan **berurutan** di SQL Editor (atau `supabase db push`):
 | `0006_storage.sql` | bucket privat `tv-media` + policy |
 | `0007_realtime.sql` | publikasi `contents`, `ticker`, `settings`, `commands` |
 | `0008_seed.sql` | baris `settings` Batam + ticker sambutan |
+| `0009_remove_sholat_mode.sql` | hapus kolom ihtiyati/iqamah/khutbah/prayer mode (v2.2) |
+| `0010_consistency_fixes.sql` | constraint `screen_state`, consent santri, guard super terakhir, batas log, pairing 5x, heartbeat dengan jumlah konten, pembersihan perangkat pending, policy Storage berprefix |
+| `0011_screenshot_policy.sql` | policy Storage `screenshots/` untuk perangkat TV |
+| `0012_show_caption.sql` | kolom `contents.show_caption` (izin menampilkan teks foto/video di TV) |
 
 ## Setelah migrasi
 
@@ -84,8 +93,8 @@ supabase db push
 ```
 
 Jika tidak ingin menginstal CLI, tempelkan `supabase/apply_all.sql` sekali di
-**SQL Editor** Supabase, atau 8 berkas migrasi secara berurutan (lihat daftar di
-atas).
+**SQL Editor** Supabase, atau 10 berkas migrasi secara berurutan (lihat daftar
+di atas).
 
 ## Verifikasi setelah migrasi
 

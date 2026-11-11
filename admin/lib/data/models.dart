@@ -94,10 +94,11 @@ class Device {
   bool get isPending => status == 'pending';
   bool get isRevoked => status == 'revoked';
 
-  /// Dianggap online bila heartbeat < 3 menit.
+  /// Dianggap online bila heartbeat < 10 menit (Blueprint §6.7).
   bool get isOnline {
     if (!isPaired || lastSeenAt == null) return false;
-    return DateTime.now().toUtc().difference(lastSeenAt!.toUtc()).inMinutes < 3;
+    return DateTime.now().toUtc().difference(lastSeenAt!.toUtc()).inMinutes <
+        10;
   }
 
   Device copyWith({String? name, String? status}) => Device(
@@ -231,6 +232,8 @@ class ContentItem {
     this.pinned = false,
     this.active = true,
     this.status = 'draft',
+    this.consentConfirmed = false,
+    this.showCaption = true,
     this.updatedAt,
     this.createdAt,
   });
@@ -253,10 +256,63 @@ class ContentItem {
   final bool pinned;
   final bool active;
   final String status;
+
+  /// Persetujuan orang tua/wali untuk konten yang memuat nama santri
+  /// (Blueprint §19, risiko privasi).
+  final bool consentConfirmed;
+
+  /// Izin menampilkan judul & keterangan bersama media di TV. Hanya berlaku
+  /// untuk konten foto/video; tipe lain selalu menampilkan teksnya.
+  final bool showCaption;
   final DateTime? updatedAt;
   final DateTime? createdAt;
 
   bool get isPublished => status == 'published';
+
+  bool get isMediaContent => type == 'photo' || type == 'video';
+
+  /// Teks boleh tampil di TV bila konten bukan foto/video, atau bila admin
+  /// sudah mengaktifkan [showCaption].
+  bool get captionVisible => !isMediaContent || showCaption;
+
+  /// Judul untuk daftar panel. Konten tanpa judul tetap bisa dibedakan
+  /// lewat [primaryMediaName] dan thumbnail.
+  String get displayTitle {
+    final clean = title.trim();
+    if (clean.isNotEmpty) return clean;
+    return switch (type) {
+      'photo' => 'Foto tanpa judul',
+      'video' => 'Video tanpa judul',
+      'achievement' => 'Prestasi tanpa judul',
+      'schedule' => 'Jadwal tanpa judul',
+      _ => 'Pengumuman tanpa judul',
+    };
+  }
+
+  /// Media pertama yang mewakili konten (untuk thumbnail dan identifikasi).
+  MediaItem? get primaryMedia {
+    if (media.isEmpty) return null;
+    if (isMediaContent) {
+      final wanted = type == 'video' ? 'video' : 'image';
+      for (final item in media) {
+        if (item.type.startsWith(wanted)) return item;
+      }
+    }
+    return media.first;
+  }
+
+  /// Nama berkas media utama, dipakai agar konten tanpa judul tidak
+  /// tertukar saat dihapus.
+  String? get primaryMediaName {
+    final item = primaryMedia;
+    if (item == null) return null;
+    final name = item.name.trim();
+    if (name.isNotEmpty) return name;
+    final path = item.path.trim();
+    if (path.isEmpty) return null;
+    final slash = path.lastIndexOf('/');
+    return slash >= 0 ? path.substring(slash + 1) : path;
+  }
 
   String get typeLabel => switch (type) {
     'announcement' => 'Pengumuman',
@@ -286,11 +342,16 @@ class ContentItem {
     pinned: pinned ?? this.pinned,
     active: active,
     status: status,
+    consentConfirmed: consentConfirmed,
+    showCaption: showCaption,
     updatedAt: updatedAt,
     createdAt: createdAt,
   );
 
-  Map<String, dynamic> toMap({bool includeId = false}) => {
+  Map<String, dynamic> toMap({
+    bool includeId = false,
+    bool includeConsent = true,
+  }) => {
     if (includeId && id != null) 'id': id,
     'type': type,
     'title': title.trim(),
@@ -309,6 +370,8 @@ class ContentItem {
     'pinned': pinned,
     'active': active,
     'status': status,
+    if (includeConsent) 'consent_confirmed': consentConfirmed,
+    'show_caption': showCaption,
   };
 
   factory ContentItem.fromMap(Map<String, dynamic> map) => ContentItem(
@@ -332,6 +395,8 @@ class ContentItem {
     pinned: map['pinned'] as bool? ?? false,
     active: map['active'] as bool? ?? true,
     status: map['status'] as String? ?? 'draft',
+    consentConfirmed: map['consent_confirmed'] as bool? ?? false,
+    showCaption: map['show_caption'] as bool? ?? true,
     updatedAt: Wib.parse(map['updated_at']),
     createdAt: Wib.parse(map['created_at']),
   );
@@ -382,31 +447,8 @@ class SettingsRow {
     this.longitude = 104.05,
     this.timezone = 'Asia/Jakarta',
     this.hijriOffset = const {},
-    this.ihtiyati = const {
-      'subuh': 2,
-      'dzuhur': 2,
-      'ashar': 2,
-      'maghrib': 2,
-      'isya': 2,
-    },
-    this.iqamahMinutes = const {
-      'subuh': 10,
-      'dzuhur': 10,
-      'ashar': 10,
-      'maghrib': 7,
-      'isya': 10,
-    },
-    this.khutbahMinutes = 15,
-    this.prayerDurationMinutes = 12,
     this.slideDurationSeconds = 10,
-    this.tickerSpeed = 72,
-    this.prayerModeEnabled = const {
-      'subuh': true,
-      'dzuhur': true,
-      'ashar': true,
-      'maghrib': true,
-      'isya': true,
-    },
+    this.tickerSpeed = 60,
     this.emergency,
     this.version = 1,
     this.updatedAt,
@@ -419,13 +461,8 @@ class SettingsRow {
   final double longitude;
   final String timezone;
   final Map<String, dynamic> hijriOffset;
-  final Map<String, dynamic> ihtiyati;
-  final Map<String, dynamic> iqamahMinutes;
-  final int khutbahMinutes;
-  final int prayerDurationMinutes;
   final int slideDurationSeconds;
   final int tickerSpeed;
-  final Map<String, dynamic> prayerModeEnabled;
   final Map<String, dynamic>? emergency;
   final int version;
   final DateTime? updatedAt;
@@ -438,60 +475,26 @@ class SettingsRow {
     'longitude': longitude,
     'timezone': timezone,
     'hijri_offset': hijriOffset,
-    'ihtiyati': ihtiyati,
-    'iqamah_minutes': iqamahMinutes,
-    'khutbah_minutes': khutbahMinutes,
-    'prayer_duration_minutes': prayerDurationMinutes,
     'slide_duration_seconds': slideDurationSeconds,
     'ticker_speed': tickerSpeed,
-    'prayer_mode_enabled': prayerModeEnabled,
     'emergency': emergency,
   };
 
-  factory SettingsRow.fromMap(Map<String, dynamic> map) {
-    final ihtiyati = _map(map['ihtiyati']);
-    final iqamah = _map(map['iqamah_minutes']);
-    final prayerMode = _map(map['prayer_mode_enabled']);
-    return SettingsRow(
-      orgName: map['org_name'] as String? ?? "Rumah Tahfizh Smart Qur'an",
-      address: map['address'] as String? ?? '',
-      city: map['city'] as String? ?? 'Batam',
-      latitude: (map['latitude'] as num?)?.toDouble() ?? 1.13,
-      longitude: (map['longitude'] as num?)?.toDouble() ?? 104.05,
-      timezone: map['timezone'] as String? ?? 'Asia/Jakarta',
-      hijriOffset: _map(map['hijri_offset']),
-      ihtiyati: ihtiyati.isEmpty
-          ? const {'subuh': 2, 'dzuhur': 2, 'ashar': 2, 'maghrib': 2, 'isya': 2}
-          : ihtiyati,
-      iqamahMinutes: iqamah.isEmpty
-          ? const {
-              'subuh': 10,
-              'dzuhur': 10,
-              'ashar': 10,
-              'maghrib': 7,
-              'isya': 10,
-            }
-          : iqamah,
-      khutbahMinutes: (map['khutbah_minutes'] as num?)?.toInt() ?? 15,
-      prayerDurationMinutes:
-          (map['prayer_duration_minutes'] as num?)?.toInt() ?? 12,
-      slideDurationSeconds:
-          (map['slide_duration_seconds'] as num?)?.toInt() ?? 10,
-      tickerSpeed: (map['ticker_speed'] as num?)?.toInt() ?? 72,
-      prayerModeEnabled: prayerMode.isEmpty
-          ? const {
-              'subuh': true,
-              'dzuhur': true,
-              'ashar': true,
-              'maghrib': true,
-              'isya': true,
-            }
-          : prayerMode,
-      emergency: map['emergency'] is Map ? _map(map['emergency']) : null,
-      version: (map['version'] as num?)?.toInt() ?? 1,
-      updatedAt: Wib.parse(map['updated_at']),
-    );
-  }
+  factory SettingsRow.fromMap(Map<String, dynamic> map) => SettingsRow(
+    orgName: map['org_name'] as String? ?? "Rumah Tahfizh Smart Qur'an",
+    address: map['address'] as String? ?? '',
+    city: map['city'] as String? ?? 'Batam',
+    latitude: (map['latitude'] as num?)?.toDouble() ?? 1.13,
+    longitude: (map['longitude'] as num?)?.toDouble() ?? 104.05,
+    timezone: map['timezone'] as String? ?? 'Asia/Jakarta',
+    hijriOffset: _map(map['hijri_offset']),
+    slideDurationSeconds:
+        (map['slide_duration_seconds'] as num?)?.toInt() ?? 10,
+    tickerSpeed: (map['ticker_speed'] as num?)?.toInt() ?? 60,
+    emergency: map['emergency'] is Map ? _map(map['emergency']) : null,
+    version: (map['version'] as num?)?.toInt() ?? 1,
+    updatedAt: Wib.parse(map['updated_at']),
+  );
 }
 
 class LogEntry {

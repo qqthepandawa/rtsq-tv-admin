@@ -11,7 +11,9 @@ class SupabaseConfig {
       'sb_publishable_KaMGXIAHHPjWMG5vA0Q64g_miBf1nuA';
 
   /// Basis URL panel ini. Dipakai untuk tautan konfirmasi email/reset sandi.
-  static const String adminBaseUrl = 'https://tv.rtsq.id';
+  /// Memakai domain gratis Cloudflare Pages; ganti hanya bila Anda
+  /// memiliki domain kustom (mis. tv.rtsq.id).
+  static const String adminBaseUrl = 'https://main.rtsq-tv-admin.pages.dev';
 
   static const String storageBucket = 'tv-media';
 }

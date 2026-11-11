@@ -1,12 +1,14 @@
 # Laporan Fase 3 — Panel Admin Web RTSQ TV
 
-Status: **kode admin web selesai, diverifikasi secara visual di browser, siap di-deploy ke Cloudflare Pages setelah DNS `tv.rtsq.id` aktif dan bootstrap admin pertama dijalankan.**
+Status: **kode admin web selesai, terverifikasi di browser, dan sudah di-deploy ke Cloudflare Pages (domain gratis). QR di TV kini mengarah ke domain `pages.dev`; pairing end-to-end siap diuji.**
 
-Tanggal: 6 November 2026
+Domain admin gratis: **https://main.rtsq-tv-admin.pages.dev**
+
+Tanggal: 6 November 2026 (deploy: 6 November 2026)
 
 ## 1. Scope Fase 3 (selesai)
 
-Panel admin web (Flutter Web, folder `admin/`, project `rtsq_admin`) yang menjadi satu-satunya penulis konten, pengaturan, perangkat, dan akun admin RTSQ TV. Di-hosting terpisah dari aplikasi TV pada `https://tv.rtsq.id` (Cloudflare Pages), tanpa rilis Play Store.
+Panel admin web (Flutter Web, folder `admin/`, project `rtsq_admin`) yang menjadi satu-satunya penulis konten, pengaturan, perangkat, dan akun admin RTSQ TV. Di-hosting di Cloudflare Pages domain gratis, tanpa rilis Play Store.
 
 | Halaman | Isi | Berkas |
 |---|---|---|
@@ -16,7 +18,7 @@ Panel admin web (Flutter Web, folder `admin/`, project `rtsq_admin`) yang menjad
 | Konten | Daftar, tambah, ubah, hapus, urutkan, sematkan, pratinjau 16:9, status tayang/draf | `lib/features/content/content_page.dart`, `content_editor_page.dart` |
 | Pratinjau TV | Kanvas 16:9 persis seperti TV (header, slide, sholat, ticker) | `lib/features/preview/preview_page.dart`, `tv_preview.dart` |
 | Ticker | CRUD kalimat berjalan + jadwal mulai/selesai | `lib/features/ticker/ticker_page.dart` |
-| Pengaturan | Identitas, koordinat, ihtiyati/iqamah, Hijriah, durasi slide, mode darurat | `lib/features/settings/settings_page.dart` |
+| Pengaturan | Identitas, koordinat, Hijriah, durasi slide, tema, mode darurat | `lib/features/settings/settings_page.dart` |
 | Perangkat | Pairing (super saja), ganti nama, perintah (reload/restart/screenshot/sync), cabut, hapus | `lib/features/devices/devices_page.dart` |
 | Log | Log perangkat dengan filter level, pembersihan log lama (super) | `lib/features/logs/logs_page.dart` |
 | Akun | Undang admin, ubah peran, nonaktifkan (super saja) | `lib/features/accounts/accounts_page.dart` |
@@ -41,7 +43,7 @@ Panel admin web (Flutter Web, folder `admin/`, project `rtsq_admin`) yang menjad
 
 ## 3. Verifikasi visual di browser (localhost:8088)
 
-Build web release berhasil (`flutter build web --release` → `√ Built build\web`). Diserpak dengan Python static server + SPA fallback, lalu diperiksa di browser:
+Build web release berhasil (`flutter build web --release` → `√ Built build\web`). Tujukan dengan Python static server + SPA fallback, lalu diperiksa di browser:
 
 | Halaman | Hasil | Bukti |
 |---|---|---|
@@ -52,9 +54,31 @@ Build web release berhasil (`flutter build web --release` → `√ Built build\w
 
 Tes otomatis: `flutter analyze` **No issues found**, `flutter test` **9 tes lulus** (format WIB, model konten/perangkat/pengaturan, format Hijriah, widget login seluler + lebar).
 
-Catatan: persetujuan pairing sebenarnya memerlukan akun admin yang sudah ada di `profiles` (bootstrap SQL di `supabase/README.md`), sehingga endpoint `/pair` hanya bisa diuji utuh setelah admin pertama dibuat manual di Supabase SQL Editor.
+Catatan: persetujuan pairing memerlukan akun admin yang sudah ada di `profiles`; user sudah menjalankan bootstrap SQL, jadi pairing end-to-end siap dicoba.
 
-## 4. Bootstrap admin pertama (perlu dijalankan pengguna di Supabase SQL Editor)
+## 4. Deploy ke Cloudflare Pages (diselesaikan)
+
+Proyek `rtsq-tv-admin` terhubung ke GitHub (`qqthepandawa/rtsq-tv-admin`).
+
+1. Build lokal berhasil, lalu **direct upload** melalui Wrangler:
+
+   ```powershell
+   cd "C:\RTSQ TV\admin\build\web"
+   npx wrangler pages deploy . --project-name rtsq-tv-admin
+   ```
+
+   Hasil: deployment lengkap di `https://main.rtsq-tv-admin.pages.dev` (48 file sudah ter-upload, `_redirects` ikut).
+
+2. **Auto-build dari Git gagal** (Cloudflare salah mendeteksi Worker: `Build command: None`, `Deploy command: npx wrangler deploy`). Solusi praktis: pakai direct upload. Jika ingin auto-build, set di project:
+   - Root directory: `/admin`
+   - Build command: `flutter build web --release`
+   - Build output directory: (untuk Pages: `build/web`); pastikan `web/_redirects` tergabung.
+   Atau tetap gunakan `wrangler pages deploy` setiap kali ada perubahan.
+
+3. **`tv.rtsq.id` (kustom) tidak dipakai** karena proyek berjalan dengan 0 biaya dan `rtsq.id` dikelola di provider lain. QR di TV kini mengarah ke `https://main.rtsq-tv-admin.pages.dev/pair?code=…`.
+   - Bila suatu saat Anda memiliki `tv.rtsq.id`, cukup tambahkan CNAME `tv` → `rtsq-tv-admin.pages.dev` di DNS provider (menu Custom domains di project Pages) — tidak perlu ubah kode.
+
+## 5. Bootstrap admin pertama (sudah dijalankan user)
 
 1. Pastikan **Authentication → Providers → Anonymous Sign-ins** aktif (untuk pairing TV).
 2. Daftarkan email admin pertama lewat halaman Masuk panel admin.
@@ -70,21 +94,25 @@ on conflict (id) do nothing;
 
 4. Masuk kembali di panel → profil terbentuk sebagai `super`. Admin berikutnya ditambahkan lewat menu **Akun** (undangan berlaku 7 hari).
 
-## 5. Langkah ke depan (Fase 3 selesai → deploy)
+## 6. Kecepatan/PWA & entry point TV
 
-1. Konfirmasi DNS `tv.rtsq.id` milik RTSQ dan arahkan ke Cloudflare Pages.
-2. Buat proyek Cloudflare Pages, hubungkan repo, build settings:
-   - Build command: `flutter build web --release`
-   - Build directory: `admin/build/web`
-   - Output directory: `build/web`
-   - Pastikan `web/_redirects` tergabung (SPA fallback untuk `/pair?code=`).
-3. Deploy, lalu buka `https://tv.rtsq.id/pair?code=<kode-TV>` dari TV untuk pairing end-to-end.
-4. Pair emulator `google_tv_34` (kode `938000` atau baru) dari admin UI, verifikasi TV memuat snapshot + heartbeat.
-5. Tambahkan pengumuman pertama dari admin → verifikasi muncul di TV dalam ±60 detik.
-6. Lanjutkan Fase 2b: media cache lokal 500 MB LRU, video/playlist engine, terapkan `ihtiyati`/`iqamah` di TV, eksekusi perintah/logs, Realtime.
+- Admin: `https://main.rtsq-tv-admin.pages.dev` (login di `/login`, QR pairing menuju `/pair?code=…`).
+- TV APK perlu di-rebuild agar QR mengarah ke domain gratis ini. Kode sudah diubah; rebuild + pasang ulang APK bila ingin QR bisa dipakai.
+  - Build: `flutter build apk --release` (di folder `rtsq_tv`)
+  - Jika hanya untuk verifikasi pairing, bisa langsung buka panel → **Perangkat → Pasangkan TV** → masukkan kode dari layar TV (tidak tergantung QR).
 
-## 6. Berkas baru / diubah
+## 7. Langkah berikutnya
+
+1. Rebuild APK TV, pasang, dan uji pairing menggunakan kode `233443` (atau kode baru di layar TV).
+2. Verifikasi TV memuat snapshot + heartbeat end-to-end.
+3. Tambahkan pengumuman pertama dari admin → verifikasi muncul di TV dalam ±60 detik.
+4. Lanjutkan Fase 2b: media cache lokal 500 MB LRU, video/playlist engine,
+   eksekusi perintah/logs, Realtime, layar idle, mode darurat.
+
+## 8. Berkas baru / diubah
 
 - `admin/` — seluruh project panel admin (baru)
-- `docs/Fase 3 - Laporan.md` — laporan ini (baru)
-- `supabase/README.md` — sudah ada, berisi petunjuk bootstrap admin
+- `docs/Fase 3 - Laporan.md` — laporan ini (diperbarui)
+- `rtsq_tv/lib/core/app_info.dart` — `adminBaseUrl` → `https://main.rtsq-tv-admin.pages.dev`
+- `admin/lib/core/supabase_config.dart` — `adminBaseUrl` → `https://main.rtsq-tv-admin.pages.dev`
+- `supabase/README.md` — berisi petunjuk bootstrap admin

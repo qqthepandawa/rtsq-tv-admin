@@ -6,8 +6,11 @@ const files = readdirSync(dir)
   .filter((name) => name.endsWith('.sql'))
   .sort();
 
+const first = files[0]?.slice(0, 4) ?? '0000';
+const last = files.at(-1)?.slice(0, 4) ?? '0000';
+
 const parts = [
-  '-- RTSQ TV — gabungan migrasi 0001 sampai 0008',
+  `-- RTSQ TV - gabungan migrasi ${first} sampai ${last}`,
   '-- Tempel seluruh isi berkas ini ke Supabase SQL Editor, lalu Run sekali.',
   '-- Dibuat otomatis dari supabase/migrations; jangan diedit manual.',
   '',

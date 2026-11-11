@@ -1,10 +1,10 @@
-# Blueprint RTSQ TV v2.1
+# Blueprint RTSQ TV v2.2
 
 **Aplikasi layar TV RTSQ (Android TV / Google TV) + panel admin**
 
 | | |
 |---|---|
-| Versi | 2.1 — 4 November 2026 (revisi backend: Firebase → Supabase) |
+| Versi | 2.2 – 6 November 2026 (revisi: TV lobby — mode sholat dihapus) |
 | Status | Draf untuk persetujuan pemilik |
 | Pemilik | RTSQ — Rumah Tahfizh Smart Qur'an, Batam |
 | Perangkat target | AQUA MatrixTV CE, Android TV 14 |
@@ -25,10 +25,12 @@
 | 6 | Perangkat | Bagian 0.5 baru: uji perangkat nyata sebelum koding besar | Launcher Aqua adalah risiko terbesar proyek |
 | 7 | Konten | Tambah status draf/tayang, prioritas, mode darurat, validasi media, kuota cache | v1 terlalu sederhana untuk operasi harian |
 | 8 | Playlist | Tambah mesin playlist, preload, penanganan media gagal | Mencegah layar hitam dan item kedaluwarsa |
-| 9 | Layar | Tambah state machine prioritas layar | Perlu aturan jelas saat sholat/darurat/slideshow bentrok |
+| 9 | Layar | Tambah state machine prioritas layar | Perlu aturan jelas saat mode darurat/slideshow bentrok |
 | 10 | Keamanan | Tambah auth perangkat, token, RLS/rules, pencabutan, audit | Kode pairing saja tidak cukup |
 | 11 | Operasional | Tambah skrip provisioning ADB, kartu pemulihan, backup keystore | Tanpa ini TV tidak bisa dirawat |
 | 12 | Screenshot | Diganti tangkapan internal `RepaintBoundary` + ADB | MediaProjection tidak bisa otomatis di TV |
+| 13 | Ruang lingkup | **TV lobi — bukan layar masjid**: mode sholat, iqamah, dan ihtiyati dihapus sepenuhnya | TV hanya mengingatkan masuknya waktu sholat, bukan menuntun ibadah |
+| 14 | Admin | Pengaturan ihtiyati/iqamah/khutbah/mode sholat dihapus; layar & database diselaraskan | Konsisten dengan cakupan lobby |
 
 Yang **tidak berubah**: tujuan, tata letak tiga zona, prinsip TV hanya menampilkan, roadmap bertahap, dan larangan menyimpan rahasia di repo.
 
@@ -37,11 +39,13 @@ Yang **tidak berubah**: tujuan, tata letak tiga zona, prinsip TV hanya menampilk
 ## 1. Tujuan, cakupan, non-cakupan
 
 ### 1.1 Tujuan
-TV kantor RTSQ menyala → langsung menampilkan RTSQ TV layar penuh → konten dapat diubah dari HP oleh lebih dari satu admin, tanpa menyentuh TV.
+TV lobi RTSQ menyala → langsung menampilkan RTSQ TV layar penuh → konten dapat diubah dari HP oleh lebih dari satu admin, tanpa menyentuh TV.
+
+**Bukan untuk sholat.** TV lobi hanya mengingatkan masuknya waktu sholat (kartu aktif, hitung mundur); tidak ada mode sholat, iqamah, atau layar redup.
 
 ### 1.2 Cakupan
 - Jam besar, nama & alamat lembaga, tanggal Masehi dan Hijriah.
-- Jadwal sholat Batam, kartu aktif, hitung mundur, mode iqamah.
+- Jadwal sholat Batam, kartu aktif, hitung mundur — pengingat masuknya waktu sholat (bukan untuk sholat).
 - Slideshow: pengumuman, prestasi santri, foto/poster, video kegiatan, jadwal kegiatan.
 - Teks berjalan.
 - Mode darurat (pesan mendesak menutupi layar).
@@ -51,7 +55,7 @@ TV kantor RTSQ menyala → langsung menampilkan RTSQ TV layar penuh → konten d
 - Pemantauan: status online, log, perintah jarak jauh.
 - Kiosk: app menjadi beranda atau dibuka otomatis saat TV menyala.
 
-### 1.3 Non-cakupan (v2.1)
+### 1.3 Non-cakupan (v2.2)
 - Suara adzan (disiapkan arsitekturnya, tidak diaktifkan).
 - Multi-lembaga dalam satu instalasi (satu `orgId`, field disiapkan).
 - Statistik penayangan.
@@ -59,6 +63,7 @@ TV kantor RTSQ menyala → langsung menampilkan RTSQ TV layar penuh → konten d
 - Integrasi apa pun dengan RTSQ Mobile (database, auth, storage, dan repo berbeda).
 - Aplikasi mobile native untuk admin (cukup web/PWA).
 - Update APK otomatis tanpa konfirmasi (tidak realistis tanpa device owner).
+- **Mode sholat, iqamah, dan pengaturan ihtiyati** — TV lobi tidak memimpin ibadah; hanya pengingat masuknya waktu sholat.
 
 ---
 
@@ -142,9 +147,9 @@ Berdasarkan pengujian 4 November 2026:
 **Strategi data:**
 1. Saat build, unduh jadwal Batam untuk 2026–2028 dari myquran, simpan di `assets/prayer/`.
 2. Verifikasi sampel 3 bulan terhadap `bimasislam.kemenag.go.id`; catat hasil verifikasi di `docs/verifikasi-jadwal.md`.
-3. Saat runtime, utamakan aset; jika tanggal di luar aset, coba unduh; jika gagal, hitung `adhan` dengan parameter Kemenag (Subuh 20°, Isya 18°, ihtiyati 2 menit).
+3. Saat runtime, utamakan aset; jika tanggal di luar aset, coba unduh; jika gagal, hitung `adhan` dengan parameter Kemenag (Subuh 20°, Isya 18°, ihtiyati 2 menit — parameter metode resmi, tetap, bukan pengaturan pengguna).
 4. Prefetch tahun berikutnya mulai 1 November.
-5. Koreksi manual per waktu sholat tetap tersedia di admin (ihtiyati).
+5. Tidak ada koreksi manual per waktu sholat di admin. Data Kemenag bersifat final; jadwal resmi sudah termasuk ihtiyati.
 
 ---
 
@@ -160,6 +165,7 @@ Berdasarkan pengujian 4 November 2026:
 8. Semua waktu dihitung pada **UTC+7 eksplisit**, tidak bergantung pada timezone perangkat.
 9. Tidak ada animasi berat. Target: 60 fps untuk jam, 30 fps untuk teks berjalan.
 10. Setiap fase selesai dengan: kode, tes, cara menjalankan, daftar selesai/belum, risiko.
+11. TV lobi hanya **mengingatkan** masuknya waktu sholat; tidak ada mode sholat, iqamah, layar redup, atau pengaturan ihtiyati.
 
 ---
 
@@ -238,8 +244,8 @@ Kontras teks utama terhadap latar > 7:1.
   - **Aktif**: waktu sholat terakhir yang sudah lewat (bukan Imsak/Syuruq).
   - **Berikutnya**: waktu berikutnya, dengan hitung mundur.
   - Imsak dan Syuruq ditampilkan tetapi tidak pernah menjadi "sholat aktif".
-- Hari Jumat: label kartu Dzuhur menjadi **Jumat**; durasi iqamah/khutbah terpisah.
-- Ihtiyati per waktu dapat diubah admin (default 0 karena data Kemenag sudah final).
+- Hari Jumat: label kartu Dzuhur menjadi **Jumat**.
+- Tidak ada opsi ihtiyati per waktu di admin; ihtiyati 2 menit adalah bagian dari metode resmi Kemenag dan sudah termasuk di jadwal sumber.
 - Ganti hari pada 00:00 lokal; jadwal bulan berikutnya sudah tersedia di cache.
 
 ### 6.3 Tanggal Hijriah
@@ -268,16 +274,14 @@ Aturan:
 ### 6.5 Teks berjalan
 - Daftar kalimat dengan `startAt`/`endAt`, urut, aktif.
 - Digabung dengan pemisah `•`, kecepatan dapat diatur (default 60 px/detik).
-- Berhenti sementara saat mode sholat/darurat.
+- Berjalan terus; tidak ada jeda untuk sholat. Pada mode darurat, ticker disembunyikan.
 
-### 6.6 Mode sholat / iqamah
-- Dipicu saat masuk waktu sholat (bukan Imsak/Syuruq, kecuali diaktifkan).
-- Layar penuh: nama sholat, waktu, hitung mundur iqamah.
-- Setelah iqamah: layar redup (10% kecerahan) sampai durasi sholat berakhir (default 15 menit) atau sampai waktu sholat berikutnya.
-- Setelah selesai: kembali ke playlist dari item yang tertunda.
-- Bisa dinonaktifkan per waktu sholat.
-- Jumat: durasi khutbah terpisah (default 20 menit).
-- Slideshow dan video **dipause**, bukan dibuang.
+### 6.6 Pengingat waktu sholat (bukan mode sholat)
+- TV lobi hanya mengingatkan masuknya waktu sholat: kartu sholat aktif di-highlight, kartu berikutnya menampilkan hitung mundur.
+- Tidak ada layar penuh sholat, tidak ada iqamah, tidak ada hitung mundur iqamah, tidak ada layar redup.
+- Jadwal tetap tampil di samping slideshow; konten berjalan terus tanpa dijeda.
+- Hari Jumat: label kartu Dzuhur menjadi **Jumat**. Tidak ada khutbah/durasi terpisah.
+- Pengingat ringan tidak pernah menjeda atau mengalahkan slideshow.
 
 ### 6.7 Mode darurat
 - Admin mengirim pesan darurat (judul, isi, warna, durasi atau sampai dicabut).
@@ -293,7 +297,6 @@ Aturan:
 ```text
 darurat (100)
   > pairing (90)
-  > sholat/iqamah (80)
   > slideshow (50)
   > idle (20)
   > boot/error (10)
@@ -386,7 +389,7 @@ Alur: super admin mengundang email → orang mendaftar → RPC `accept_invite()`
 | model / android_version / app_version | text | |
 | last_seen_at / last_sync_at | timestamptz | |
 | current_content_id | uuid | |
-| screen_state | text | `content`/`prayer`/`emergency`/`idle` |
+| screen_state | text | `content`/`emergency`/`idle` |
 | storage_used_bytes / storage_free_bytes | bigint | |
 | network | text | `wifi`/`ethernet`/`none` |
 | paired_at / paired_by | timestamptz / uuid | |
@@ -399,14 +402,9 @@ Alur: super admin mengundang email → orang mendaftar → RPC `accept_invite()`
 | latitude, longitude | numeric(9,6) |
 | timezone | text default `Asia/Jakarta` |
 | hijri_offset | jsonb (peta bulan → hari) |
-| ihtiyati | jsonb (per waktu) |
-| iqamah_minutes | jsonb (per waktu) |
-| khutbah_minutes | int |
-| prayer_duration_minutes | int |
 | slide_duration_seconds | int |
 | ticker_speed | int |
 | theme | jsonb |
-| prayer_mode_enabled | jsonb |
 | emergency | jsonb \| null |
 | updated_at / updated_by | timestamptz / uuid |
 
@@ -543,7 +541,7 @@ Flutter Web di folder `admin/`, di-hosting **Cloudflare Pages** (atau Netlify) p
 | Konten | Daftar, tambah, ubah, hapus, urutkan (drag), jadwal tayang, status draf/tayang, pin, prioritas |
 | Pratinjau | Kanvas 16:9 persis seperti TV |
 | Ticker | CRUD kalimat |
-| Pengaturan | Nama/alamat, koordinat, iqamah, Hijriah, durasi slide, tema, mode darurat |
+| Pengaturan | Nama/alamat, koordinat, Hijriah, durasi slide, tema, mode darurat |
 | Perangkat | Pairing, ganti nama, cabut, lihat versi |
 | Log | Filter level dan waktu |
 | Akun | Undang admin, ubah peran, nonaktifkan |
@@ -658,7 +656,7 @@ Estimasi part-time dengan AI-assisted development.
 - Aset jadwal 2026–2028 + verifikasi Kemenag.
 - Engine jadwal, hitung mundur, highlight, Jumat.
 - Hijriah + offset + pergantian Maghrib.
-- Mode iqamah + redup.
+- Pengingat masuknya waktu sholat: kartu aktif, hitung mundur, label Jumat.
 - Unit test rollover, bulan baru, Jumat, jam salah, offline.
 
 **Selesai bila:** cocok dengan jadwal resmi Batam; tetap benar setelah restart dan setelah internet dimatikan.
@@ -677,10 +675,10 @@ Estimasi part-time dengan AI-assisted development.
 **Kerja:**
 - Mesin playlist, preload, video, fade, fallback.
 - Ticker.
-- State machine: darurat, sholat, slideshow, idle.
+- State machine: darurat, slideshow, idle.
 - Log & perintah jarak jauh.
 
-**Selesai bila:** tidak ada layar hitam antar item; media rusak dilewati; mode sholat mengalahkan slideshow dan kembali dengan benar.
+**Selesai bila:** tidak ada layar hitam antar item; media rusak dilewati; mode darurat mengalahkan slideshow dan kembali dengan benar.
 
 ### Fase 3 — Admin web (5–7 hari)
 **Kerja:**
@@ -712,7 +710,7 @@ Suara adzan, mode Ramadhan (imsak/iftar), multi-TV, statistik, update APK, notif
 | Offline 24 jam | Cabut internet, restart TV | Konten & jadwal tetap tampil |
 | Rollover bulan | Set tanggal ke akhir bulan | Jadwal bulan baru benar |
 | Hijriah | Cek 3 tanggal terhadap Kemenag | Selisih ≤ offset yang diset |
-| Jumat | Set tanggal Jumat | Label Jumat + durasi khutbah |
+| Jumat | Set tanggal Jumat | Label Jumat |
 | Media rusak | Ganti file dengan byte acak | Item dilewati, log tercatat |
 | Video besar | Unggah 4K 5 menit | Ditolak dengan pesan jelas |
 | Storage penuh | Isi cache > kuota | LRU berjalan, app tetap tampil |
@@ -734,7 +732,7 @@ Suara adzan, mode Ramadhan (imsak/iftar), multi-TV, statistik, update APK, notif
 | Captive portal WiFi | TV offline setelah reboot | Ethernet atau bypass MAC |
 | Supabase Free membatasi storage/egress | Media tidak bisa diunggah | Cek kuota; kompres; upgrade Pro bila perlu |
 | Jam TV melenceng | Countdown salah | Koreksi header Date |
-| Jadwal beda 1–2 menit | Komplain | Data Kemenag + ihtiyati admin |
+| Jadwal beda 1-2 menit | Komplain | Data Kemenag |
 | Hijriah beda 1 hari | Komplain | Offset per bulan |
 | Update APK terhambat | Versi lama | ADB/Tailscale + Play internal track |
 | Kehilangan keystore | Tidak bisa update | Backup di password manager + cetak |
@@ -807,7 +805,7 @@ Catatan: `anon` key memang dirancang untuk publik; keamanan dijaga oleh RLS, buk
 
 ## 17. Keputusan terbuka
 
-1. URL admin: `rtsq-tv.pages.dev` (gratis) atau `tv.rtsq.id`?
+1. ~~URL admin~~ → **diputusi: `main.rtsq-tv-admin.pages.dev` (gratis)**. `tv.rtsq.id` tidak dipakai; QR TV sudah diarahkan ke domain gratis.
 2. Perlu persetujuan sebelum konten tayang? (default: tidak, semua editor langsung tayang; status draf tersedia).
 3. Nama lengkap santri pada konten prestasi: nama lengkap atau nama depan + kelas?
 4. Logo YKCA: apakah ada versi putih/mono dan aturan co-branding dari yayasan?

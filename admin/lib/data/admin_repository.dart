@@ -258,25 +258,42 @@ class AdminRepository {
 
   Future<ContentItem> saveContent(ContentItem item) async {
     try {
-      final payload = item.toMap();
-      if (item.id == null) {
-        final row = await client
-            .from('contents')
-            .insert(payload)
-            .select()
-            .single();
-        return ContentItem.fromMap(row);
+      return await _writeContent(item, includeConsent: true);
+    } on PostgrestException catch (error) {
+      // Beberapa proyek belum menjalankan migrasi 0010 sehingga kolom
+      // consent_confirmed belum ada. Simpan tanpa kolom itu agar penyuntingan
+      // tetap berjalan; validasi persetujuan tetap dilakukan di editor.
+      if (error.message.contains('consent_confirmed')) {
+        try {
+          return await _writeContent(item, includeConsent: false);
+        } on PostgrestException catch (retry) {
+          throw AdminException(_dbMessage(retry));
+        }
       }
+      throw AdminException(_dbMessage(error));
+    }
+  }
+
+  Future<ContentItem> _writeContent(
+    ContentItem item, {
+    required bool includeConsent,
+  }) async {
+    final payload = item.toMap(includeConsent: includeConsent);
+    if (item.id == null) {
       final row = await client
           .from('contents')
-          .update(payload)
-          .eq('id', item.id!)
+          .insert(payload)
           .select()
           .single();
       return ContentItem.fromMap(row);
-    } on PostgrestException catch (error) {
-      throw AdminException(_dbMessage(error));
     }
+    final row = await client
+        .from('contents')
+        .update(payload)
+        .eq('id', item.id!)
+        .select()
+        .single();
+    return ContentItem.fromMap(row);
   }
 
   Future<void> deleteContent(String id) =>
@@ -450,12 +467,34 @@ class AdminRepository {
           ? img.copyResize(decoded, width: 1920)
           : img.copyResize(decoded, height: 1920);
     }
-    final jpg = img.encodeJpg(decoded, quality: 85);
+
+    // Batas berkas akhir 4 MB setelah kompresi (Blueprint §6.4).
+    const maxOutputBytes = 4 * 1024 * 1024;
+    var output = decoded;
+    var jpg = img.encodeJpg(output, quality: 85);
+    if (jpg.length > maxOutputBytes) {
+      jpg = img.encodeJpg(output, quality: 70);
+    }
+    if (jpg.length > maxOutputBytes) {
+      output = img.copyResize(
+        output,
+        width: (output.width * 0.75).round(),
+        height: (output.height * 0.75).round(),
+      );
+      jpg = img.encodeJpg(output, quality: 75);
+    }
+    if (jpg.length > maxOutputBytes) {
+      throw const AdminException(
+        'Gambar melebihi 4 MB setelah kompresi. Gunakan gambar yang lebih '
+        'kecil atau sederhana.',
+      );
+    }
+
     final thumb = img.encodeJpg(
       img.copyResize(
-        decoded,
-        width: decoded.width >= decoded.height ? 640 : null,
-        height: decoded.height > decoded.width ? 640 : null,
+        output,
+        width: output.width >= output.height ? 640 : null,
+        height: output.height > output.width ? 640 : null,
       ),
       quality: 80,
     );
@@ -486,8 +525,8 @@ class AdminRepository {
       name: name,
       size: jpg.length,
       checksum: hash,
-      width: decoded.width,
-      height: decoded.height,
+      width: output.width,
+      height: output.height,
       thumbPath: thumbPath,
     );
   }
@@ -567,6 +606,10 @@ class AdminRepository {
     }
     if (error.code == '23505') {
       return 'Data sudah ada.';
+    }
+    if (error.message.contains('show_caption')) {
+      return 'Database belum mendukung pengaturan teks TV. '
+          'Jalankan migrasi 0012_show_caption.sql di Supabase.';
     }
     if (error.message.contains('Kode pairing')) {
       return error.message;

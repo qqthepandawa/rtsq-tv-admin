@@ -54,7 +54,7 @@ Tanggal: 6 November 2026
 | Kuota cache 500 MB + LRU | Fase 2b |
 | Eksekusi `claim_commands`/`complete_command` | Fase 2b (perintah jarak jauh) |
 | Kirim `logs` ke Supabase | Fase 2b |
-| Terapkan `ihtiyati`/`iqamah` dari settings ke `PrayerService` | Fase 2b |
+| Terapkan setting Hijriah (`hijri_offset`) dari settings ke `PrayerService` | Fase 2b |
 | Perangkat `revoked` bisa daftar ulang | RPC `register_device` saat ini menolak; perlu keputusan admin |
 
 ## 2. Bukti uji emulator

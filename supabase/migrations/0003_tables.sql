@@ -89,17 +89,9 @@ create table if not exists public.settings (
   longitude               numeric(9, 6) not null default 104.050000,
   timezone                text not null default 'Asia/Jakarta',
   hijri_offset            jsonb not null default '{}'::jsonb,
-  ihtiyati                jsonb not null default
-    '{"subuh": 2, "dzuhur": 2, "ashar": 2, "maghrib": 2, "isya": 2}'::jsonb,
-  iqamah_minutes          jsonb not null default
-    '{"subuh": 10, "dzuhur": 10, "ashar": 10, "maghrib": 7, "isya": 10}'::jsonb,
-  khutbah_minutes         integer not null default 15,
-  prayer_duration_minutes integer not null default 12,
   slide_duration_seconds  integer not null default 10,
   ticker_speed            integer not null default 72,
   theme                   jsonb not null default '{}'::jsonb,
-  prayer_mode_enabled     jsonb not null default
-    '{"subuh": true, "dzuhur": true, "ashar": true, "maghrib": true, "isya": true}'::jsonb,
   emergency               jsonb,
   version                 integer not null default 1,
   updated_at              timestamptz not null default now(),
