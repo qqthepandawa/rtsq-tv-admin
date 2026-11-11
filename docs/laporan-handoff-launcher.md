@@ -113,6 +113,20 @@ setelah ayat terakhir sebuah surah, bukan berhenti. Mode **"Ulangi surah ∞"**
 tetap mengulang surah yang sama, dan pada surah terakhir (114) pemutaran
 berhenti seperti sebelumnya.
 
+**Batas ukuran unggahan video.** Panel admin tidak lagi memblokir ukuran
+(sebelumnya 60 MB). Batas sebenarnya ada di **Supabase Storage**: `413 Payload
+too large` muncul bila berkas melebihi *Global file size limit* project. Sesuai
+dokumentasi Supabase, **paket Free maksimal 50 MB per berkas** (tidak bisa
+dinaikkan); **paket Pro** bisa sampai 500 GB. Jadi video 57 MB tidak akan
+berhasil pada paket Free. Untuk menerima berkas lebih besar:
+
+1. Naikkan **Global file size limit** di Dashboard Supabase →
+   Storage → Settings (butuh paket Pro).
+2. Jalankan `supabase/migrations/0012_storage_unlimited.sql` agar bucket
+   `tv-media` tidak menambah batasnya sendiri.
+3. Tidak perlu ubah kode; panel admin sudah meneruskan berkas apa adanya dan
+   hanya menampilkan pesan yang jelas bila server menolak.
+
 **Verifikasi di TV (v0.3.0, build ulang).** Panel dibuka dengan ▲ menampilkan
 baris **Suara Video** (`docs/screenshots/tv-panel-2.png`); menekan OK mengubah
 subjudul menjadi "Nyala · OK untuk mematikan" tanpa menutup panel
@@ -232,6 +246,12 @@ Perbaikan:
   `nextAyah()` maju ke surah berikutnya pada mode "Lanjut otomatis".
 - `test/murottal_test.dart` — uji lanjut otomatis ke surah berikutnya.
 - `test/goldens/quick_settings_1920x1080.png` — golden diperbarui.
+- `admin/lib/data/admin_repository.dart` — hapus blokir 60 MB; terjemahkan
+  `StorageException` 413 menjadi pesan batas Supabase yang jelas.
+- `supabase/migrations/0012_storage_unlimited.sql` — **baru**: bucket
+  `tv-media` tanpa batas sendiri (ikut Global file size limit project).
+- `supabase/apply_all.sql`, `supabase/chunks/09.sql` — bucket `tv-media`
+  memakai `file_size_limit = null`.
 
 ## 6. Kondisi TV & Cara Menyambung ADB
 

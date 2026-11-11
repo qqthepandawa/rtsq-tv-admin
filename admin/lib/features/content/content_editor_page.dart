@@ -601,10 +601,12 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
         SectionCard(
           title: 'Media',
           subtitle: _type == 'video'
-              ? 'Video MP4 maksimal 60 MB. Diputar sampai habis tanpa batas '
-                    'waktu, lalu slideshow lanjut otomatis. Suara video bisa '
-                    'dinyalakan sementara dari panel pengaturan cepat di TV '
-                    '(bawaan mati agar murottal tetap terdengar).'
+              ? 'Video MP4 tanpa batas durasi; diputar sampai habis lalu '
+                    'slideshow lanjut otomatis. Ukuran mengikuti batas '
+                    'Supabase Storage (paket Free 50 MB; paket Pro bisa '
+                    'dinaikkan). Suara video bisa dinyalakan sementara dari '
+                    'panel pengaturan cepat di TV (bawaan mati agar murottal '
+                    'tetap terdengar).'
               : 'Gambar dikompres ke maksimal 1920 px, JPEG kualitas 85. '
                     'Rasio ideal 16:9 (1920×1080); foto tegak 4:5 atau 3:4 '
                     'tetap tampil utuh.',

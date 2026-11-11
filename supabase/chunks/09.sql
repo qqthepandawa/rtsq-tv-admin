@@ -33,15 +33,16 @@ create policy audit_select on public.audit_log
 -- 0006_storage.sql
 -- Bucket privat `tv-media` + policy Storage (Blueprint 7.12 / 18.6).
 --
--- Batas bucket 60 MB (video). Gambar dibatasi 4 MB di panel admin.
--- Hanya tipe yang diizinkan.
+-- Ukuran mengikuti Global file size limit project (lihat 0012): paket Free
+-- maksimum 50 MB/berkas, paket Pro dapat dinaikkan. Gambar dibatasi 4 MB di
+-- panel admin. Hanya tipe yang diizinkan.
 
 insert into storage.buckets (id, name, "public", file_size_limit, allowed_mime_types)
 values (
   'tv-media',
   'tv-media',
   false,
-  62914560,
+  null,
   array['image/jpeg', 'image/png', 'image/webp', 'video/mp4']
 )
 on conflict (id) do update

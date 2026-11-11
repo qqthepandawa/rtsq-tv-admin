@@ -433,9 +433,10 @@ class AdminRepository {
 
     final isVideo = _looksLikeVideo(picked.name, picked.extension);
     if (isVideo) {
-      if (bytes.length > 60 * 1024 * 1024) {
-        throw const AdminException('Video melebihi 60 MB. Kompres dulu.');
-      }
+      // Tidak ada batas ukuran di sisi aplikasi. Batas sebenarnya ditentukan
+      // Supabase Storage (Global file size limit + file_size_limit bucket).
+      // Bila melebihi, server mengembalikan 413 dan diterjemahkan di
+      // _uploadRaw menjadi pesan yang mudah dipahami.
       return _uploadRaw(
         bytes,
         picked.name,
@@ -542,13 +543,27 @@ class AdminRepository {
     final ext = (name.contains('.') ? name.split('.').last : 'mp4')
         .toLowerCase();
     final path = 'contents/$stamp-$hash.$ext';
-    await client.storage
-        .from(SupabaseConfig.storageBucket)
-        .uploadBinary(
-          path,
-          bytes,
-          fileOptions: FileOptions(contentType: contentType),
+    try {
+      await client.storage
+          .from(SupabaseConfig.storageBucket)
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(contentType: contentType),
+          );
+    } on StorageException catch (error) {
+      final tooLarge =
+          error.statusCode == '413' ||
+          error.message.toLowerCase().contains('exceeded the maximum allowed');
+      if (tooLarge) {
+        throw const AdminException(
+          'Berkas melebihi batas Supabase Storage. Paket Free dibatasi 50 MB '
+          'per berkas. Naikkan "Global file size limit" di Dashboard Supabase '
+          '(butuh paket Pro), atau kompres video agar di bawah batas tersebut.',
         );
+      }
+      rethrow;
+    }
     return MediaItem(
       path: path,
       type: type,
