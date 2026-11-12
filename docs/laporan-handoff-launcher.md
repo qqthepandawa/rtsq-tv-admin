@@ -323,8 +323,9 @@ Perbaikan:
   (`https://main.rtsq-tv-admin.pages.dev`); kanvas 1920×1080 sudah mengikuti
   tata letak TV (16:9, panel sholat vertikal, header ramping). Untuk konten
   **video**, pratinjau memutar berkas aslinya (elemen `<video>` dengan kontrol,
-  suara bawaan **mati** mengikuti TV) — jadi bisa dicek sebelum
-  disimpan/ditayangkan.
+  suara bawaan **mati** mengikuti TV; pemutaran **mulai sendiri** karena
+  di-mute). Bila browser tidak bisa men-decode berkas (mis. H.265/HEVC), muncul
+  pesan saran ekspor MP4 H.264 — TV tetap bisa memutar berkas aslinya.
 - **Deploy admin web**: Cloudflare Pages proyek ini memakai **direct upload**
   (auto-build dari Git tidak berfungsi, lihat `docs/Fase 3 - Laporan.md` §4).
   `git push` **tidak** otomatis men-deploy. Setiap kali admin berubah:
