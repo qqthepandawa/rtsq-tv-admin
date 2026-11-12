@@ -23,7 +23,7 @@ Menambahkan menu tersembunyi murottal pada aplikasi TV (`rtsq_tv`):
 | Sumber audio | Streaming MP3 per ayat dari CDN, dengan fallback bitrate sesuai ketersediaan qori (128/192/64/48/32 kbps) |
 | Navigasi ayat | Sebelumnya / Berikutnya, lanjut otomatis ke ayat berikutnya |
 | Basmalah | Diputar sebelum ayat 1 setiap surah, kecuali Al-Fatihah (basmalah adalah ayat pertamanya) dan At-Taubah |
-| Pengulangan | Otomatis, Ayat 3x, Ayat 5x, Ayat tanpa batas, Surah tanpa batas |
+| Pengulangan | Tanpa ulang, Ayat 3x, Ayat 5x, Ayat tanpa batas, Surah tanpa batas |
 | Kecepatan | 0.5x sampai 2.0x (preset 0.5 / 0.75 / 1 / 1.25 / 1.5 / 1.75 / 2) |
 | Progres | Posisi dan durasi ayat ditampilkan di panel |
 | Layar utama | Chip "Sedang diputar" (surah, ayat, kecepatan) di kanan atas saat panel ditutup |

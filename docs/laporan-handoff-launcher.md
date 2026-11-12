@@ -109,9 +109,10 @@ tetap terdengar sambil video berjalan.
 
 **Murottal lanjut ke surah berikutnya.** Mode **"Lanjut otomatis"**
 (`MurottalRepeat.off`) kini berpindah ke **surah berikutnya** (mulai ayat 1)
-setelah ayat terakhir sebuah surah, bukan berhenti. Mode **"Ulangi surah ∞"**
-tetap mengulang surah yang sama, dan pada surah terakhir (114) pemutaran
-berhenti seperti sebelumnya.
+setelah ayat terakhir sebuah surah, bukan berhenti. Pada panel, nilai kolom
+**ULANGI** untuk mode ini ditulis **"Tanpa ulang"** (sebelumnya "Otomatis"
+agar tidak ambigu). Mode **"Ulangi surah ∞"** tetap mengulang surah yang sama,
+dan pada surah terakhir (114) pemutaran berhenti seperti sebelumnya.
 
 **Bismillah sebelum ayat 1 (kecuali Al-Fatihah & At-Taubah).** Setiap surah
 dibuka dengan audio basmalah lebih dulu, lalu otomatis memuat **ayat 1**.
