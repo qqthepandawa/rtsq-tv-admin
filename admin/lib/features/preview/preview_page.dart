@@ -27,6 +27,7 @@ class _PreviewPageState extends State<PreviewPage> {
   List<PreviewPrayer> _prayers = const [];
   ContentItem? _selected;
   String? _imageUrl;
+  String? _videoUrl;
 
   List<Device> _devices = const [];
   Device? _liveDevice;
@@ -105,16 +106,31 @@ class _PreviewPageState extends State<PreviewPage> {
   Future<void> _resolveImage() async {
     final item = _selected;
     if (item == null) {
-      if (mounted) setState(() => _imageUrl = null);
+      if (mounted) {
+        setState(() {
+          _imageUrl = null;
+          _videoUrl = null;
+        });
+      }
       return;
     }
     String? url;
+    String? video;
     for (final media in item.media) {
+      if (media.type.startsWith('video')) {
+        video ??= await _repo.signedUrl(media.path);
+        continue;
+      }
       if (!media.type.startsWith('image')) continue;
       url = await _repo.signedUrl(media.path);
       if (url != null) break;
     }
-    if (mounted) setState(() => _imageUrl = url);
+    if (mounted) {
+      setState(() {
+        _imageUrl = url;
+        _videoUrl = video;
+      });
+    }
   }
 
   void _setLiveAuto(bool value) {
@@ -417,6 +433,7 @@ class _PreviewPageState extends State<PreviewPage> {
                     prayers: _prayers,
                     tickerText: _tickerText,
                     imageUrl: _imageUrl,
+                    videoUrl: _videoUrl,
                     slideIndex: index < 0 ? 0 : index,
                     slideCount: _contents.isEmpty ? 1 : _contents.length,
                   ),

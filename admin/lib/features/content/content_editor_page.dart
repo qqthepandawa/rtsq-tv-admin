@@ -168,9 +168,9 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
     final full = <String, String>{};
     final thumbs = <String, String>{};
     for (final item in _media) {
-      if (!item.type.startsWith('image')) continue;
       final fullUrl = await _repo.signedUrl(item.path);
       if (fullUrl != null) full[item.path] = fullUrl;
+      if (!item.type.startsWith('image')) continue;
       final thumbUrl = item.thumbPath == null
           ? fullUrl
           : await _repo.signedUrl(item.thumbPath!);
@@ -218,6 +218,15 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
   String? get _previewImageUrl {
     for (final item in _media) {
       if (!item.type.startsWith('image')) continue;
+      final url = _mediaUrls[item.path];
+      if (url != null) return url;
+    }
+    return null;
+  }
+
+  String? get _previewVideoUrl {
+    for (final item in _media) {
+      if (!item.type.startsWith('video')) continue;
       final url = _mediaUrls[item.path];
       if (url != null) return url;
     }
@@ -847,6 +856,7 @@ class _ContentEditorPageState extends State<ContentEditorPage> {
             prayers: _prayers,
             tickerText: _tickerText,
             imageUrl: _previewImageUrl,
+            videoUrl: _previewVideoUrl,
             slideCount: 1,
           ),
         ),

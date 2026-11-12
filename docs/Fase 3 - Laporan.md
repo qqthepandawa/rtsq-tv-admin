@@ -16,7 +16,7 @@ Panel admin web (Flutter Web, folder `admin/`, project `rtsq_admin`) yang menjad
 | Pairing | Setujui TV via kode 6 digit dari `/?code=` atau input manual | `lib/features/pair/pair_page.dart` |
 | Dasbor | Status TV online/offline, konten tayang, ticker, durasi slide, identitas layar, tombol konten baru | `lib/features/dashboard/dashboard_page.dart` |
 | Konten | Daftar, tambah, ubah, hapus, urutkan, sematkan, pratinjau 16:9, status tayang/draf | `lib/features/content/content_page.dart`, `content_editor_page.dart` |
-| Pratinjau TV | Kanvas 16:9 persis seperti TV (header, slide, sholat, ticker) | `lib/features/preview/preview_page.dart`, `tv_preview.dart` |
+| Pratinjau TV | Kanvas 16:9 persis seperti TV (header, slide, sholat, ticker); konten video diputar langsung dengan kontrol (suara bawaan mati) | `lib/features/preview/preview_page.dart`, `tv_preview.dart`, `video_surface.dart` |
 | Ticker | CRUD kalimat berjalan + jadwal mulai/selesai | `lib/features/ticker/ticker_page.dart` |
 | Pengaturan | Identitas, koordinat, Hijriah, durasi slide, tema, mode darurat | `lib/features/settings/settings_page.dart` |
 | Perangkat | Pairing (super saja), ganti nama, perintah (reload/restart/screenshot/sync), cabut, hapus | `lib/features/devices/devices_page.dart` |

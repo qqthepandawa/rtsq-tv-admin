@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/format.dart';
 import '../../data/models.dart';
 import 'prayer_preview.dart';
+import 'video_surface.dart';
 
 const _bg = Color(0xFF0E2620);
 const _bgDeep = Color(0xFF081B16);
@@ -30,6 +31,7 @@ class TvPreview extends StatefulWidget {
     required this.prayers,
     required this.tickerText,
     this.imageUrl,
+    this.videoUrl,
     this.slideIndex = 0,
     this.slideCount = 1,
     this.animateTicker = true,
@@ -41,6 +43,9 @@ class TvPreview extends StatefulWidget {
   final List<PreviewPrayer> prayers;
   final String tickerText;
   final String? imageUrl;
+
+  /// URL video (Supabase signed URL) untuk konten bertipe video.
+  final String? videoUrl;
   final int slideIndex;
   final int slideCount;
   final bool animateTicker;
@@ -138,6 +143,7 @@ class _TvPreviewState extends State<TvPreview> {
                                       child: _Slide(
                                         content: widget.content,
                                         imageUrl: widget.imageUrl,
+                                        videoUrl: widget.videoUrl,
                                         index: widget.slideIndex,
                                         count: widget.slideCount,
                                       ),
@@ -455,12 +461,14 @@ class _Slide extends StatelessWidget {
   const _Slide({
     required this.content,
     required this.imageUrl,
+    required this.videoUrl,
     required this.index,
     required this.count,
   });
 
   final ContentItem? content;
   final String? imageUrl;
+  final String? videoUrl;
   final int index;
   final int count;
 
@@ -503,7 +511,11 @@ class _Slide extends StatelessWidget {
           else if (item.type == 'schedule')
             _ScheduleSlide(item: item)
           else
-            _ContentSlide(item: item, imageUrl: imageUrl),
+            _ContentSlide(
+              item: item,
+              imageUrl: imageUrl,
+              videoUrl: videoUrl,
+            ),
           if (count > 1 && !immersive)
             Positioned(
               top: 20,
@@ -537,10 +549,15 @@ class _Slide extends StatelessWidget {
 }
 
 class _ContentSlide extends StatelessWidget {
-  const _ContentSlide({required this.item, required this.imageUrl});
+  const _ContentSlide({
+    required this.item,
+    required this.imageUrl,
+    required this.videoUrl,
+  });
 
   final ContentItem item;
   final String? imageUrl;
+  final String? videoUrl;
 
   /// Lebar panel media dihitung dari tinggi kotak 16:9 yang tersedia,
   /// sama seperti aplikasi TV. Poster tinggi memakai panel sempit, gambar
@@ -576,6 +593,7 @@ class _ContentSlide extends StatelessWidget {
     final media = _MediaPanel(
       item: item,
       imageUrl: imageUrl,
+      videoUrl: videoUrl,
       immersive: _immersive,
     );
     if (_immersive) return media;
@@ -679,16 +697,20 @@ class _MediaPanel extends StatelessWidget {
   const _MediaPanel({
     required this.item,
     required this.imageUrl,
+    required this.videoUrl,
     this.immersive = false,
   });
 
   final ContentItem item;
   final String? imageUrl;
+  final String? videoUrl;
   final bool immersive;
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
+    final showVideo =
+        item.type == 'video' && videoUrl != null && videoUrl!.isNotEmpty;
+    if (showVideo || (imageUrl != null && imageUrl!.isNotEmpty)) {
       final image = Container(
         decoration: BoxDecoration(
           color: const Color(0xFF0A1512),
@@ -696,11 +718,13 @@ class _MediaPanel extends StatelessWidget {
           border: immersive ? null : Border.all(color: _line),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Image.network(
-          imageUrl!,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
+        child: showVideo
+            ? buildVideoSurface(url: videoUrl!)
+            : Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
       );
       if (immersive) return ColoredBox(color: Colors.black, child: image);
       return Padding(

@@ -122,7 +122,12 @@ class _ContentPageState extends State<ContentPage> {
 
   Future<void> _preview(ContentItem item) async {
     String? imageUrl;
+    String? videoUrl;
     for (final media in item.media) {
+      if (media.type.startsWith('video')) {
+        videoUrl ??= await _repo.signedUrl(media.path);
+        continue;
+      }
       if (!media.type.startsWith('image')) continue;
       imageUrl = await _repo.signedUrl(media.thumbPath ?? media.path);
       if (imageUrl != null) break;
@@ -158,6 +163,7 @@ class _ContentPageState extends State<ContentPage> {
                   prayers: _prayers,
                   tickerText: _tickerText,
                   imageUrl: imageUrl,
+                  videoUrl: videoUrl,
                   slideIndex: slideIndex < 0 ? 0 : slideIndex,
                   slideCount: _contents.isEmpty ? 1 : _contents.length,
                   animateTicker: false,
