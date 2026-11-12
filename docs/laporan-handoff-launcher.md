@@ -113,6 +113,37 @@ setelah ayat terakhir sebuah surah, bukan berhenti. Mode **"Ulangi surah ∞"**
 tetap mengulang surah yang sama, dan pada surah terakhir (114) pemutaran
 berhenti seperti sebelumnya.
 
+**Bismillah sebelum ayat 1 (kecuali Al-Fatihah & At-Taubah).** Setiap surah
+dibuka dengan audio basmalah lebih dulu, lalu otomatis memuat **ayat 1**.
+Aturannya ada di `surahNeedsBasmalah(n) => n != 1 && n != 9`:
+Al-Fatihah tidak perlu basmalah tambahan karena basmalah adalah ayat
+pertamanya, dan At-Taubah memang tidak dibuka basmalah. Audio basmalah memakai
+**Al-Fatihah ayat 1 dari qori yang sama** (`basmalahGlobalAyah = 1`) sehingga
+tidak menambah aset dan suaranya konsisten. Basmalah berlaku saat memilih
+surah, saat **lanjut otomatis** ke surah berikutnya, dan saat **"Ulangi surah
+∞"**. Selama basmalah berbunyi, panel dan chip menampilkan **"Bismillah"**
+(`docs/screenshots/murottal-bismillah.png`), lalu berganti menjadi
+"ayat 1" setelah basmalah selesai. At-Taubah langsung menampilkan "ayat 1"
+(`docs/screenshots/murottal-taubah.png`).
+
+**Verifikasi di emulator (12 Nov 2026).** AVD **Google TV** API 34 di mesin
+ini hanya tersedia sebagai image **x86 32-bit**, sedangkan Flutter 3.44 tidak
+lagi menyertakan engine x86 (APK hanya berisi `libflutter.so` x86_64) sehingga
+aplikasi tidak bisa start di AVD tersebut (`MissingLibraryException`). Karena
+itu uji perilaku dilakukan di AVD **Pixel 6 (x86_64)** memakai entrypoint uji
+`lib/dev/murottal_check.dart` yang menampilkan `MurottalPanel` dan audio asli
+(tanpa perlu pairing Supabase). Hasil:
+
+| Uji | Hasil |
+|---|---|
+| Al-Baqarah (2) | `bismillah=true`, durasi 6,1 dtk → lanjut ayat 1 |
+| At-Taubah (9) | `bismillah=false`, langsung ayat 1 |
+| Al-Fatihah (1) | `bismillah=false`, langsung ayat 1 |
+| Al-Ikhlas ayat 4 habis | lanjut Al-Falaq dan memutar basmalahnya lebih dulu |
+
+Entrypoint `lib/dev/murottal_check.dart` hanya alat bantu manual dan tidak
+dipakai pada build produksi (`flutter build apk` tetap memakai `lib/main.dart`).
+
 **Batas ukuran unggahan video.** Panel admin tidak lagi memblokir ukuran
 (sebelumnya 60 MB). Batas sebenarnya ada di **Supabase Storage**: `413 Payload
 too large` muncul bila berkas melebihi *Global file size limit* project. Sesuai
@@ -244,7 +275,19 @@ Perbaikan:
   baris **Suara Video** (subjudul/ikon mengikuti keadaan).
 - `lib/features/murottal/murottal_controller.dart` — `_onCompleted()` dan
   `nextAyah()` maju ke surah berikutnya pada mode "Lanjut otomatis".
-- `test/murottal_test.dart` — uji lanjut otomatis ke surah berikutnya.
+- `lib/features/murottal/murottal_controller.dart` — basmalah diputar sekali
+  sebelum ayat 1 setiap surah baru (audio Al-Fatihah ayat 1 dari qori yang
+  sama), lalu lanjut ke ayat 1. Dilewati untuk Al-Fatihah dan At-Taubah.
+- `lib/features/murottal/quran_data.dart` — helper `surahNeedsBasmalah()` dan
+  `basmalahGlobalAyah`.
+- `lib/features/murottal/murottal_panel.dart` — chip/header menampilkan
+  "Bismillah" selama audio basmalah berbunyi.
+- `lib/dev/murottal_check.dart` — **baru**: entrypoint uji manual panel murottal
+  + audio asli untuk emulator (tidak dipakai build produksi).
+- `docs/screenshots/murottal-bismillah.png`,
+  `docs/screenshots/murottal-taubah.png` — bukti uji emulator.
+- `test/murottal_test.dart` — uji lanjut otomatis ke surah berikutnya, basmalah
+  sebelum surah baru, serta pengecualian Al-Fatihah/At-Taubah.
 - `test/goldens/quick_settings_1920x1080.png` — golden diperbarui.
 - `admin/lib/data/admin_repository.dart` — hapus blokir 60 MB; terjemahkan
   `StorageException` 413 menjadi pesan batas Supabase yang jelas.

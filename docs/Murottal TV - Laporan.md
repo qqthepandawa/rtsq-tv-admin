@@ -22,6 +22,7 @@ Menambahkan menu tersembunyi murottal pada aplikasi TV (`rtsq_tv`):
 | Qori | 17 qori unik (duplikat `-2` digabung), dipilih lewat grid 2 kolom |
 | Sumber audio | Streaming MP3 per ayat dari CDN, dengan fallback bitrate sesuai ketersediaan qori (128/192/64/48/32 kbps) |
 | Navigasi ayat | Sebelumnya / Berikutnya, lanjut otomatis ke ayat berikutnya |
+| Basmalah | Diputar sebelum ayat 1 setiap surah, kecuali Al-Fatihah (basmalah adalah ayat pertamanya) dan At-Taubah |
 | Pengulangan | Otomatis, Ayat 3x, Ayat 5x, Ayat tanpa batas, Surah tanpa batas |
 | Kecepatan | 0.5x sampai 2.0x (preset 0.5 / 0.75 / 1 / 1.25 / 1.5 / 1.75 / 2) |
 | Progres | Posisi dan durasi ayat ditampilkan di panel |
@@ -31,6 +32,8 @@ Menambahkan menu tersembunyi murottal pada aplikasi TV (`rtsq_tv`):
 | Penanganan error | Pesan ramah saat audio gagal dimuat, timeout 12 detik per bitrate, lalu coba bitrate berikutnya |
 
 Pemetaan nomor ayat memakai nomor global 1-6236, sehingga URL audio selalu tepat untuk setiap surah/ayat.
+
+Audio basmalah memakai rekaman **Al-Fatihah ayat 1** dari qori yang sedang dipilih, jadi suaranya konsisten. Basmalah dimainkan sekali setiap kali masuk surah baru (termasuk saat mengulang surah), lalu otomatis berlanjut ke ayat 1. Tidak ada basmalah terpisah untuk **Al-Fatihah** dan **At-Taubah**. Saat basmalah berbunyi, chip dan header panel menampilkan "Bismillah".
 
 ## 3. Berkas yang dikerjakan
 
